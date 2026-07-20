@@ -1,0 +1,86 @@
+.page {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 45% 30% at 80% 0%, rgba(200, 255, 61, 0.25), transparent 55%),
+    var(--paper);
+}
+
+.top {
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.topInner {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.25rem;
+  letter-spacing: -0.04em;
+}
+
+.wrap {
+  padding-block: 2.5rem 4rem;
+}
+
+.title {
+  margin-top: 0.6rem;
+  font-size: clamp(2rem, 4vw, 2.8rem);
+}
+
+.lead {
+  margin: 0.8rem 0 2rem;
+  color: var(--muted);
+  max-width: 48ch;
+}
+
+.list {
+  display: grid;
+  gap: 1rem;
+}
+
+.item {
+  border: 1.5px solid var(--ink);
+  border-radius: 18px;
+  padding: 1.25rem 1.3rem;
+  background: color-mix(in srgb, white 72%, var(--paper));
+}
+
+.item[data-on="1"] {
+  background: color-mix(in srgb, var(--lime) 35%, white);
+}
+
+.item h2 {
+  font-size: 1.4rem;
+}
+
+.badge {
+  margin: 0.45rem 0 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+
+.item[data-on="0"] .badge {
+  color: var(--muted);
+}
+
+.item p {
+  color: var(--ink-soft);
+  max-width: 60ch;
+}
+
+.item code {
+  font-size: 0.9em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 6px;
+  background: rgba(16, 20, 24, 0.06);
+}
