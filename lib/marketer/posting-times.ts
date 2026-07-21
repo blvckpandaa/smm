@@ -49,10 +49,9 @@ export const WEEKDAY_MULTIPLIER: Record<number, number> = {
   6: 0.9, // Sat
 };
 
-export function pickMinute(channel: Channel, hour: number): number {
-  // Stagger away from :00/:30 spam peaks
+export function pickMinute(channel: Channel, hour: number, seed = 0): number {
   const base = channel === "telegram" ? 12 : channel === "vk" ? 17 : 7;
-  return (base + hour * 3) % 50;
+  return ((base + hour * 3 + seed * 11) % 55) + 2;
 }
 
 export function formatHm(hour: number, minute: number): string {

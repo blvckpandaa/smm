@@ -7,7 +7,7 @@ export default function ConnectionsPage() {
       <header className={styles.top}>
         <div className={`container ${styles.topInner}`}>
           <Link href="/" className={styles.logo}>
-            AgentMark
+            SMM-Agents
           </Link>
           <Link href="/plan" className="btn">
             В кабинет

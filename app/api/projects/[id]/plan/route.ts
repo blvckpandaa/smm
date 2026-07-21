@@ -1,11 +1,15 @@
 import { requireSession } from "@/lib/auth/request";
 import { buildContentPlan } from "@/lib/ai/deepseek";
+import { POST_PRICE_RUB } from "@/lib/billing/pricing";
+import { resolvePostFrequency } from "@/lib/marketer/frequency";
 import { isValidTimeZone } from "@/lib/marketer/timezone";
 import { slotFromLocalInput } from "@/lib/schedule/pick-time";
 import type { ContentPlan, PlannedPost } from "@/lib/marketer/types";
 import type { PostDraft } from "@/lib/smm/types";
 import {
+  chargeUserForPosts,
   getProjectForUser,
+  getUserById,
   toPublicProject,
   updateProject,
 } from "@/lib/store/projects";
@@ -28,7 +32,31 @@ export async function POST(req: Request, ctx: Ctx) {
     if (!isValidTimeZone(brief.timezone)) brief.timezone = "Europe/Moscow";
     if (!brief.startDate) brief.startDate = new Date().toISOString().slice(0, 10);
     if (!brief.channels?.length) brief.channels = ["telegram"];
-    if (!brief.postsPerWeek) brief.postsPerWeek = 7;
+
+    const freq = resolvePostFrequency(brief);
+    brief.postsPerDay = freq.postsPerDay;
+    brief.postsPerWeek = freq.postsPerWeek;
+
+    const postsCount = freq.postsPerWeek;
+    const charge = chargeUserForPosts({
+      userId: auth.session.userId,
+      postsCount,
+      pricePerPost: POST_PRICE_RUB,
+      projectId: id,
+      description: `Маркетолог: план ${freq.postsPerDay}/день (${postsCount} постов) × ${POST_PRICE_RUB} ₽`,
+    });
+    if (!charge.ok) {
+      return Response.json(
+        {
+          error: charge.error,
+          code: "INSUFFICIENT_BALANCE",
+          balanceRub: charge.balanceRub,
+          needRub: charge.needRub,
+          postPriceRub: POST_PRICE_RUB,
+        },
+        { status: 402 }
+      );
+    }
 
     const { plan, source } = await buildContentPlan(brief);
 
@@ -41,10 +69,19 @@ export async function POST(req: Request, ctx: Ctx) {
       name: brief.brandName || project.name,
     });
 
+    const user = getUserById(auth.session.userId);
+
     return Response.json({
       project: toPublicProject(updated!),
       plan,
       source,
+      billing: {
+        chargedRub: charge.chargedRub,
+        balanceRub: user?.balanceRub ?? charge.balanceRub,
+        postsCount,
+        postsPerDay: freq.postsPerDay,
+        postPriceRub: POST_PRICE_RUB,
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка плана";

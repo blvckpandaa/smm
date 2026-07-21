@@ -1,0 +1,252 @@
+export type UiLang = "ru" | "en";
+
+export const UI_LANG_KEY = "smm-agents-ui-lang";
+
+export const AUDIENCE_LANGUAGES: { id: string; labelRu: string; labelEn: string }[] = [
+  { id: "ru", labelRu: "Русский", labelEn: "Russian" },
+  { id: "en", labelRu: "Английский", labelEn: "English" },
+  { id: "kk", labelRu: "Казахский", labelEn: "Kazakh" },
+  { id: "uk", labelRu: "Украинский", labelEn: "Ukrainian" },
+  { id: "uz", labelRu: "Узбекский", labelEn: "Uzbek" },
+  { id: "tr", labelRu: "Турецкий", labelEn: "Turkish" },
+  { id: "es", labelRu: "Испанский", labelEn: "Spanish" },
+  { id: "de", labelRu: "Немецкий", labelEn: "German" },
+  { id: "fr", labelRu: "Французский", labelEn: "French" },
+  { id: "pt", labelRu: "Португальский", labelEn: "Portuguese" },
+  { id: "ar", labelRu: "Арабский", labelEn: "Arabic" },
+  { id: "zh", labelRu: "Китайский", labelEn: "Chinese" },
+];
+
+/** Каналы, которые реально публикуют сейчас */
+export const WORKING_CHANNELS = new Set(["telegram", "vk"]);
+
+export const dict = {
+  ru: {
+    loading: "Загрузка проектов…",
+    logout: "Выйти",
+    cabinetTitle: "Кабинет SMM-Agents",
+    cabinetLead:
+      "Создайте бизнес ниже — откроется рабочий стол с контентом, расписанием и каналами.",
+    businessNamePh: "Название бизнеса",
+    createBusiness: "Создать бизнес",
+    trash: "Корзина",
+    deleted: "удалён",
+    restore: "Восстановить",
+    business: "Бизнес",
+    newBusiness: "Новый бизнес",
+    delete: "Удалить",
+    noNiche: "без ниши",
+    nicheNotSet: "ниша не выбрана",
+    tabDrafts: "Контент",
+    tabDraftsShort: "Посты",
+    tabPlan: "Расписание",
+    tabPlanShort: "План",
+    tabBrief: "Бизнес",
+    tabBriefShort: "Бизнес",
+    tabChannels: "Каналы",
+    tabChannelsShort: "Каналы",
+    briefEyebrow: "Бизнес",
+    briefTitle: "Профиль бизнеса",
+    briefLead:
+      "Данные для агентов. Можно править в любой момент — не анкета, а настройки кабинета.",
+    brandName: "Название бизнеса",
+    brandNamePh: "например: Кофейня Утро",
+    businessType: "Тип бизнеса",
+    nicheCustom: "Ниша своими словами",
+    nichePh: "уточните, если выбрали «Другое» или хотите точнее",
+    timezone: "Часовой пояс",
+    postsPerWeek: "Сколько постов в неделю",
+    postsPerDay: "Сколько постов в день",
+    postsPerDayHint: "Выберите ритм — неделю и цену посчитаем сами.",
+    freqTitle: "Ритм публикаций",
+    freqPerDay: "в день",
+    freqPerWeek: "в неделю",
+    freqCost: "к оплате",
+    freqEnough: "Баланса хватает",
+    freqNeedTopup: "Нужно пополнить",
+    freqPresetLight: "Легко",
+    freqPresetNorm: "Норма",
+    freqPresetActive: "Активно",
+    freqPresetHot: "Максимум",
+    startDate: "С какой даты начать",
+    offer: "Что предлагаете клиентам",
+    offerPh: "например: авторский кофе и выпечка",
+    websiteUrl: "Сайт или ссылка на проект",
+    websiteUrlPh: "например: smm-agents.ru или t.me/yourchannel",
+    websiteUrlHint: "ИИ будет вставлять ссылку в призывы к действию и тексты постов.",
+    websiteUrlInvalid: "Проверьте ссылку — нужен корректный адрес сайта.",
+    tone: "Стиль общения (через запятую)",
+    tonePh: "тёплый, простой, без пафоса",
+    audienceWho: "Кто ваши клиенты",
+    audienceWhoPh: "например: офисные рядом, 25–40 лет",
+    audiencePain: "Какая у них проблема",
+    audiencePainPh: "например: устали от рекламных постов",
+    audienceDesire: "Чего они хотят",
+    audienceDesirePh: "например: полезные советы и атмосферу",
+    audienceLang: "Язык контента для аудитории",
+    audienceLangHint:
+      "На этом языке ИИ будет писать посты и подписи.",
+    publishWhere: "Куда публиковать",
+    soon: "скоро",
+    save: "Сохранить",
+    makePlan: "Составить план на неделю",
+    makingPlan: "Готовим план…",
+    deleteBusiness: "Удалить бизнес",
+    channelsEyebrow: "Соцсети этого бизнеса",
+    channelsTitle: "Подключите каналы",
+    channelsLead:
+      "Сейчас работают Telegram и VK. Остальные сети — скоро.",
+    channelSoon: "Скоро",
+    channelSoonNote: "Подключение появится в следующем обновлении.",
+    connectTelegram: "Подключить Telegram",
+    connectVk: "Подключить VK",
+    disconnect: "Отключить",
+    botToken: "Токен бота",
+    chatId: "Chat ID канала или группы",
+    vkToken: "Токен сообщества",
+    vkGroup: "ID группы",
+    uiLang: "Язык",
+    other: "Другое",
+  },
+  en: {
+    loading: "Loading projects…",
+    logout: "Log out",
+    cabinetTitle: "SMM-Agents cabinet",
+    cabinetLead:
+      "Create a business below — open the workspace with content, schedule, and channels.",
+    businessNamePh: "Business name",
+    createBusiness: "Create business",
+    trash: "Trash",
+    deleted: "deleted",
+    restore: "Restore",
+    business: "Business",
+    newBusiness: "New business",
+    delete: "Delete",
+    noNiche: "no niche",
+    nicheNotSet: "niche not set",
+    tabDrafts: "Content",
+    tabDraftsShort: "Posts",
+    tabPlan: "Schedule",
+    tabPlanShort: "Plan",
+    tabBrief: "Business",
+    tabBriefShort: "Biz",
+    tabChannels: "Channels",
+    tabChannelsShort: "Channels",
+    briefEyebrow: "Business",
+    briefTitle: "Business profile",
+    briefLead:
+      "Settings for the agents. Edit anytime — not a form, a cabinet.",
+    brandName: "Business name",
+    brandNamePh: "e.g. Morning Coffee",
+    businessType: "Business type",
+    nicheCustom: "Niche in your words",
+    nichePh: "clarify if you picked Other, or be more specific",
+    timezone: "Time zone",
+    postsPerWeek: "Posts per week",
+    postsPerDay: "Posts per day",
+    postsPerDayHint: "Pick a pace — we calculate the week and price.",
+    freqTitle: "Posting pace",
+    freqPerDay: "per day",
+    freqPerWeek: "per week",
+    freqCost: "to charge",
+    freqEnough: "Balance is enough",
+    freqNeedTopup: "Top up needed",
+    freqPresetLight: "Light",
+    freqPresetNorm: "Normal",
+    freqPresetActive: "Active",
+    freqPresetHot: "Max",
+    startDate: "Start date",
+    offer: "What you offer clients",
+    offerPh: "e.g. specialty coffee and pastry",
+    websiteUrl: "Website or project link",
+    websiteUrlPh: "e.g. smm-agents.ru or t.me/yourchannel",
+    websiteUrlHint: "AI will use this link in CTAs and post texts.",
+    websiteUrlInvalid: "Check the link — enter a valid website address.",
+    tone: "Tone of voice (comma-separated)",
+    tonePh: "warm, simple, no hype",
+    audienceWho: "Who are your clients",
+    audienceWhoPh: "e.g. nearby office workers, 25–40",
+    audiencePain: "Their problem",
+    audiencePainPh: "e.g. tired of ad posts",
+    audienceDesire: "What they want",
+    audienceDesirePh: "e.g. useful tips and atmosphere",
+    audienceLang: "Content language for audience",
+    audienceLangHint: "AI will write posts and captions in this language.",
+    publishWhere: "Where to publish",
+    soon: "soon",
+    save: "Save",
+    makePlan: "Build weekly plan",
+    makingPlan: "Building plan…",
+    deleteBusiness: "Delete business",
+    channelsEyebrow: "Social channels",
+    channelsTitle: "Connect channels",
+    channelsLead: "Telegram and VK work now. Other networks — soon.",
+    channelSoon: "Soon",
+    channelSoonNote: "Connection will arrive in a future update.",
+    connectTelegram: "Connect Telegram",
+    connectVk: "Connect VK",
+    disconnect: "Disconnect",
+    botToken: "Bot token",
+    chatId: "Channel or group Chat ID",
+    vkToken: "Community token",
+    vkGroup: "Group ID",
+    uiLang: "Language",
+    other: "Other",
+  },
+} as const;
+
+export type UiDict = (typeof dict)["ru"];
+
+export const BUSINESS_TYPES_I18N: Record<
+  UiLang,
+  string[]
+> = {
+  ru: [
+    "Кофейня / кафе",
+    "Ресторан",
+    "Клиника / медицина",
+    "Курсы / образование",
+    "Юрист / услуги",
+    "IT / SaaS",
+    "Магазин / e‑commerce",
+    "Салон красоты",
+    "Недвижимость",
+    "Фитнес",
+    "Онлайн-казино / iGaming",
+    "Другое",
+  ],
+  en: [
+    "Coffee shop / cafe",
+    "Restaurant",
+    "Clinic / medicine",
+    "Courses / education",
+    "Lawyer / services",
+    "IT / SaaS",
+    "Shop / e‑commerce",
+    "Beauty salon",
+    "Real estate",
+    "Fitness",
+    "Online casino / iGaming",
+    "Other",
+  ],
+};
+
+/** Map RU niche labels ↔ EN for switching UI without losing selection */
+export function nicheForUi(niche: string, lang: UiLang): string {
+  if (!niche) return niche;
+  const ru = BUSINESS_TYPES_I18N.ru;
+  const en = BUSINESS_TYPES_I18N.en;
+  const ri = ru.indexOf(niche);
+  if (ri >= 0) return lang === "ru" ? ru[ri] : en[ri];
+  const ei = en.indexOf(niche);
+  if (ei >= 0) return lang === "ru" ? ru[ei] : en[ei];
+  return niche;
+}
+
+export function nicheToCanonical(niche: string): string {
+  const en = BUSINESS_TYPES_I18N.en;
+  const ru = BUSINESS_TYPES_I18N.ru;
+  const ei = en.indexOf(niche);
+  if (ei >= 0) return ru[ei]; // store Russian canonical for planner consistency
+  return niche;
+}

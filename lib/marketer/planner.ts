@@ -1,11 +1,9 @@
 import type { BrandBrief, Channel, ContentPlan, PlannedPost, PostGoal } from "./types";
-import {
-  CHANNEL_WINDOWS,
-  WEEKDAY_MULTIPLIER,
-  formatHm,
-  pickMinute,
-} from "./posting-times";
+import { resolvePostFrequency } from "./frequency";
+import { ctaWithWebsite, normalizeWebsiteUrl } from "./website";
+import { formatHm } from "./posting-times";
 import { DEFAULT_GOAL_WEIGHTS, topicsForNiche, type TopicIdea } from "./topics";
+import { pickIdealSlot } from "./pick-slot";
 import {
   addCalendarDays,
   fromZonedTime,
@@ -73,50 +71,6 @@ function pickTopic(pool: TopicIdea[], goal: PostGoal, usedTopics: Set<string>): 
   return idea;
 }
 
-function bestSlotForDay(
-  channel: Channel,
-  ymd: string,
-  takenKeys: Set<string>,
-  goal?: PostGoal,
-  slotIndex = 0
-): { hour: number; minute: number; why: string; score: number } {
-  const dow = weekdayIndexFromYmd(ymd);
-  const windows = CHANNEL_WINDOWS[channel];
-  const candidates: { hour: number; minute: number; why: string; score: number }[] = [];
-
-  const preferEvening = goal === "engagement" || goal === "community" || goal === "offer";
-  const preferLunch = goal === "education" || goal === "trust" || goal === "awareness";
-
-  for (const w of windows) {
-    for (let hour = w.start; hour < w.end; hour++) {
-      const key = `${channel}:${ymd}:${hour}`;
-      if (takenKeys.has(key)) continue;
-      const minute = pickMinute(channel, hour);
-      let score = w.score * (WEEKDAY_MULTIPLIER[dow] ?? 1);
-      const midBoost = hour === Math.floor((w.start + w.end - 1) / 2) ? 1.05 : 1;
-      score *= midBoost;
-      if (preferEvening && hour >= 18) score *= 1.15;
-      if (preferLunch && hour >= 12 && hour < 15) score *= 1.12;
-      // Diversify: later posts on same day prefer other windows
-      if (slotIndex % 2 === 1 && hour >= 12 && hour < 15) score *= 1.08;
-      if (slotIndex % 3 === 2 && hour >= 9 && hour < 11) score *= 1.06;
-      if (takenKeys.has(`${channel}:${ymd}:${hour - 1}`)) score *= 0.8;
-      candidates.push({ hour, minute, why: w.label, score });
-    }
-  }
-
-  candidates.sort((a, b) => b.score - a.score);
-  const best = candidates[0] ?? {
-    hour: 19,
-    minute: pickMinute(channel, 19),
-    why: "fallback вечерний слот",
-    score: 50,
-  };
-
-  takenKeys.add(`${channel}:${ymd}:${best.hour}`);
-  return best;
-}
-
 function redistributeAcrossChannels(total: number, channels: Channel[]): Channel[] {
   const result: Channel[] = [];
   for (let i = 0; i < total; i++) result.push(channels[i % channels.length]);
@@ -130,6 +84,9 @@ function strategyNotes(brief: BrandBrief, extra: string[] = []): string[] {
     `Если слот не подходит — дату и час можно поменять в плане или в текстах.`,
     `Между постами в одном канале — разные окна дня.`,
     `CTA ротация: ${brief.ctaOptions.join(" / ")}.`,
+    ...(brief.websiteUrl?.trim()
+      ? [`Сайт/проект: ${normalizeWebsiteUrl(brief.websiteUrl)} — вставлять в офферные посты и CTA.`]
+      : []),
     `Ниша «${brief.niche}»: темы под аудиторию — ${brief.audience.who}.`,
     ...extra,
   ];
@@ -144,6 +101,11 @@ function postingRules(brief: BrandBrief): string[] {
   ];
   for (const t of brief.taboos ?? []) rules.push(`Табу: ${t}`);
   if (brief.facts.age) rules.push(`Дисклеймер возраста: ${brief.facts.age}`);
+  if (brief.websiteUrl?.trim()) {
+    rules.push(
+      `Ссылка на сайт/проект: ${normalizeWebsiteUrl(brief.websiteUrl)} — вставлять в CTA и тексты, где уместно (не в каждой строке).`
+    );
+  }
   return rules;
 }
 
@@ -154,17 +116,26 @@ function buildPlanFromIdeas(
 ): ContentPlan {
   const tz = isValidTimeZone(brief.timezone) ? brief.timezone : "Europe/Moscow";
   const channels = brief.channels.length ? brief.channels : (["telegram"] as Channel[]);
-  const total = Math.max(channels.length, brief.postsPerWeek, ideas.length);
+  const { postsPerDay, postsPerWeek } = resolvePostFrequency(brief);
+  const total = Math.max(channels.length, postsPerWeek, ideas.length);
   const startYmd = brief.startDate;
   const endYmd = addCalendarDays(startYmd, 6);
 
   const goals = allocateGoals(total, brief.goals);
   const channelBag = redistributeAcrossChannels(total, channels);
-  const takenKeys = new Set<string>();
+  const takenOnDay = new Set<string>();
+  const takenWeekHours = new Set<string>();
 
-  // Spread evenly across 7 days, round-robin
+  // Ровно postsPerDay постов на каждый из 7 дней
   const dayIndexes: number[] = [];
-  for (let i = 0; i < total; i++) dayIndexes.push(i % 7);
+  for (let d = 0; d < 7; d++) {
+    for (let p = 0; p < postsPerDay; p++) {
+      dayIndexes.push(d);
+    }
+  }
+  while (dayIndexes.length < total) {
+    dayIndexes.push(dayIndexes.length % 7);
+  }
 
   // Count posts per day+channel for diversification index
   const dayChannelCount = new Map<string, number>();
@@ -182,24 +153,6 @@ function buildPlanFromIdeas(
     const slotIndex = dayChannelCount.get(dcKey) ?? 0;
     dayChannelCount.set(dcKey, slotIndex + 1);
 
-    const slot = bestSlotForDay(channel, ymd, takenKeys, effectiveGoal, slotIndex);
-    const when = fromZonedTime(ymd, slot.hour, slot.minute, tz);
-    const weekday = WEEKDAYS_RU[weekdayIndexFromYmd(ymd)];
-
-    const cta =
-      effectiveGoal === "offer" || effectiveGoal === "awareness"
-        ? brief.ctaOptions[i % brief.ctaOptions.length]
-        : brief.ctaOptions.filter((c) => /коммент|голо|спроси|пишите/i.test(c))[0] ??
-          brief.ctaOptions[i % brief.ctaOptions.length];
-
-    const mustInclude = ["ценность для читателя с первых строк"];
-    if (brief.facts.age) mustInclude.push(brief.facts.age);
-    if (effectiveGoal === "offer") {
-      mustInclude.push("только подтверждённые условия из facts");
-    }
-
-    const timeLocal = formatHm(slot.hour, slot.minute);
-
     // Instagram — всегда с фото; Threads — только текст
     let format = idea.format;
     if (channel === "instagram") {
@@ -207,6 +160,38 @@ function buildPlanFromIdeas(
     } else if (channel === "threads") {
       format = "text";
     }
+
+    const slot = pickIdealSlot({
+      channel,
+      ymd,
+      goal: effectiveGoal,
+      rubric: idea.rubric,
+      format,
+      postIndex: i + slotIndex,
+      takenOnDay,
+      takenWeekHours,
+    });
+    const when = fromZonedTime(ymd, slot.hour, slot.minute, tz);
+    const weekday = WEEKDAYS_RU[weekdayIndexFromYmd(ymd)];
+
+    const cta = ctaWithWebsite(
+      effectiveGoal === "offer" || effectiveGoal === "awareness"
+        ? brief.ctaOptions[i % brief.ctaOptions.length]
+        : brief.ctaOptions.filter((c) => /коммент|голо|спроси|пишите/i.test(c))[0] ??
+            brief.ctaOptions[i % brief.ctaOptions.length],
+      brief.websiteUrl
+    );
+
+    const mustInclude = ["ценность для читателя с первых строк"];
+    if (brief.facts.age) mustInclude.push(brief.facts.age);
+    if (brief.websiteUrl?.trim()) {
+      mustInclude.push(`ссылка: ${normalizeWebsiteUrl(brief.websiteUrl)}`);
+    }
+    if (effectiveGoal === "offer") {
+      mustInclude.push("только подтверждённые условия из facts");
+    }
+
+    const timeLocal = formatHm(slot.hour, slot.minute);
 
     posts.push({
       id: `post-${ymd}-${channel}-${String(i + 1).padStart(2, "0")}`,
@@ -242,7 +227,13 @@ function buildPlanFromIdeas(
       byGoal: countBy(posts.map((p) => p.goal)),
       byRubric: countBy(posts.map((p) => p.rubric)),
     },
-    strategyNotes: strategyNotes({ ...brief, timezone: tz }, extraNotes),
+    strategyNotes: strategyNotes(
+      { ...brief, timezone: tz, postsPerDay, postsPerWeek },
+      [
+        `Частота: ${postsPerDay} пост(ов) в день · ${postsPerWeek} за неделю.`,
+        ...extraNotes,
+      ]
+    ),
     postingRules: postingRules(brief),
     posts,
   };
@@ -250,7 +241,8 @@ function buildPlanFromIdeas(
 
 export function createWeeklyPlan(brief: BrandBrief): ContentPlan {
   const channels = brief.channels.length ? brief.channels : (["telegram"] as Channel[]);
-  const total = Math.max(channels.length, brief.postsPerWeek);
+  const { postsPerWeek } = resolvePostFrequency(brief);
+  const total = Math.max(channels.length, postsPerWeek);
   const goals = allocateGoals(total, brief.goals);
   const pool = topicsForNiche(brief.niche);
   const usedTopics = new Set<string>();

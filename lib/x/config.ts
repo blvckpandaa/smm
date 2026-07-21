@@ -37,7 +37,7 @@ function stateSecret(): string {
   return (
     process.env.AUTH_SECRET?.trim() ||
     getXClientSecret() ||
-    "agentmark-x-state"
+    "smm-agents-x-state"
   );
 }
 

@@ -47,7 +47,7 @@ function LoginForm() {
   return (
     <div className={styles.card}>
       <Link href="/" className={styles.logo}>
-        AgentMark
+        SMM-Agents
       </Link>
       <h1 className={styles.title}>Вход</h1>
       <p className={styles.lead}>

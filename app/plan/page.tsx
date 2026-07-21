@@ -2,28 +2,24 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { BrandBrief, Channel, ContentPlan } from "@/lib/marketer";
+import type { BrandBrief, Channel, ContentPlan, PostGoal } from "@/lib/marketer";
 import type { PostDraft } from "@/lib/smm/types";
 import {
   pickBestSlot,
   slotFromLocalInput,
 } from "@/lib/schedule/pick-time";
+import {
+  AUDIENCE_LANGUAGES,
+  BUSINESS_TYPES_I18N,
+  WORKING_CHANNELS,
+  dict,
+  nicheForUi,
+  nicheToCanonical,
+  type UiLang,
+  UI_LANG_KEY,
+} from "@/lib/i18n/ui";
+import { isValidWebsiteUrl, normalizeWebsiteUrl } from "@/lib/marketer/website";
 import styles from "./plan.module.css";
-
-const BUSINESS_TYPES = [
-  "Кофейня / кафе",
-  "Ресторан",
-  "Клиника / медицина",
-  "Курсы / образование",
-  "Юрист / услуги",
-  "IT / SaaS",
-  "Магазин / e‑commerce",
-  "Салон красоты",
-  "Недвижимость",
-  "Фитнес",
-  "Онлайн-казино / iGaming",
-  "Другое",
-];
 
 const CHANNELS: { id: Channel; label: string }[] = [
   { id: "telegram", label: "Telegram" },
@@ -51,16 +47,25 @@ const TIMEZONES = [
 
 type Tab = "brief" | "plan" | "drafts" | "channels";
 
-const TABS: { key: Tab; label: string; short: string }[] = [
-  { key: "drafts", label: "Контент", short: "Посты" },
-  { key: "plan", label: "Расписание", short: "План" },
-  { key: "brief", label: "Бизнес", short: "Бизнес" },
-  { key: "channels", label: "Каналы", short: "Каналы" },
-];
+function tabsFor(lang: UiLang): { key: Tab; label: string; short: string }[] {
+  const t = dict[lang];
+  return [
+    { key: "drafts", label: t.tabDrafts, short: t.tabDraftsShort },
+    { key: "plan", label: t.tabPlan, short: t.tabPlanShort },
+    { key: "brief", label: t.tabBrief, short: t.tabBriefShort },
+    { key: "channels", label: t.tabChannels, short: t.tabChannelsShort },
+  ];
+}
 
 type PublicChannels = {
   telegram: { connected: boolean; chatId?: string; botTokenMasked?: string };
-  vk: { connected: boolean; groupId?: string; accessTokenMasked?: string };
+  vk: {
+    connected: boolean;
+    groupId?: string;
+    groupName?: string;
+    isStub?: boolean;
+    accessTokenMasked?: string;
+  };
   facebook: {
     connected: boolean;
     pageId?: string;
@@ -149,45 +154,10 @@ const TELEGRAM_HELP = [
 ];
 
 const VK_HELP = [
-  "Откройте сообщество VK, куда будете публиковать (или создайте новое).",
-  "Узнайте ID группы: в адресе вида vk.com/club123456 число 123456 — это ID. Можно также посмотреть в «Управление → Настройки» или через сервисы вроде vk.com/dev.",
-  "Создайте ключ доступа: Управление сообществом → Настройки → Работа с API → Создать ключ.",
-  "Отметьте право «Стена» (wall) — без него посты не уйдут.",
-  "Скопируйте токен в поле «Токен сообщества».",
-  "В поле «ID группы» вставьте число без минуса (например 123456).",
   "Нажмите «Подключить VK».",
-];
-
-const META_FB_HELP = [
-  "Нужна Facebook Page (не личный профиль).",
-  "В Meta Developer App добавьте Facebook Login и укажите Redirect URI: {APP_URL}/api/meta/callback",
-  "В .env задайте META_APP_ID, META_APP_SECRET и APP_URL (HTTPS ngrok).",
-  "Нажмите «Войти через Meta» — пароль вводите только на сайте Meta.",
-  "Для тестов добавьте свой аккаунт Tester в приложении Meta.",
-];
-
-const META_IG_HELP = [
-  "Instagram должен быть Professional (Business/Creator) и связан с Facebook Page.",
-  "Те же META_APP_ID / SECRET / APP_URL, что и для Facebook.",
-  "Права: instagram_basic + instagram_content_publish.",
-  "Для публикации нужен публичный HTTPS (ngrok) — Meta скачивает фото по URL.",
-  "Нажмите «Войти через Meta» и разрешите доступ.",
-];
-
-const META_THREADS_HELP = [
-  "Нужен аккаунт Threads, связанный с Instagram.",
-  "В Meta App добавьте продукт Threads API и тот же Redirect URI.",
-  "Нажмите «Войти через Meta» — откроется авторизация Threads.",
-  "В режиме Development публиковать можно только с тестовых аккаунтов приложения.",
-];
-
-const X_HELP = [
-  "Создайте приложение на developer.x.com (Twitter Developer Portal).",
-  "Тип: Web App, права Read and Write + OAuth 2.0.",
-  "Callback URL: {APP_URL}/api/x/callback (HTTPS через ngrok).",
-  "В .env: X_CLIENT_ID и X_CLIENT_SECRET.",
-  "Нажмите «Войти через X» — пароль только на сайте X.",
-  "API X платный/с лимитами — нужен подходящий тариф Developer.",
+  "Войдите в аккаунт VK и разрешите доступ приложению.",
+  "Выберите сообщество, куда публиковать посты — нужны права администратора.",
+  "Готово: публикации пойдут на стену выбранного сообщества.",
 ];
 
 function toggleChannel(list: Channel[], id: Channel): Channel[] {
@@ -244,6 +214,7 @@ function briefForForm(brief: BrandBrief): BrandBrief {
     niche: cleanExample(brief.niche),
     geo: cleanExample(brief.geo),
     offer: cleanExample(brief.offer),
+    websiteUrl: brief.websiteUrl?.trim() ?? "",
     toneOfVoice: (brief.toneOfVoice ?? []).filter(
       (t) => !EXAMPLE_VALUES.has(t.trim())
     ),
@@ -255,9 +226,14 @@ function briefForForm(brief: BrandBrief): BrandBrief {
   };
 }
 
-const ACTIVE_KEY = "agentmark-active-project";
+const ACTIVE_KEY = "smm-agents-active-project";
 
-type AuthUser = { id: string; email: string; name: string };
+type AuthUser = {
+  id: string;
+  email: string;
+  name: string;
+  balanceRub?: number;
+};
 
 export default function PlanPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -278,11 +254,101 @@ export default function PlanPage() {
   >([]);
   const [tgToken, setTgToken] = useState("");
   const [tgChat, setTgChat] = useState("");
-  const [vkToken, setVkToken] = useState("");
-  const [vkGroup, setVkGroup] = useState("");
+  const [vkPickOpen, setVkPickOpen] = useState(false);
+  const [vkGroups, setVkGroups] = useState<
+    { id: number; name: string; screenName?: string; photo50?: string }[]
+  >([]);
+  const [vkPickLoading, setVkPickLoading] = useState(false);
+  const [vkStubMode, setVkStubMode] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [metaStubMode, setMetaStubMode] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+  const [uiLang, setUiLang] = useState<UiLang>("ru");
+  const [balanceRub, setBalanceRub] = useState(0);
+  const [postPriceRub, setPostPriceRub] = useState(50);
+  const [topupPresets, setTopupPresets] = useState<number[]>([
+    100, 300, 500, 1000, 2000,
+  ]);
+  const [yookassaConfigured, setYookassaConfigured] = useState(false);
+  const [billingOpen, setBillingOpen] = useState(false);
+  const [topupAmount, setTopupAmount] = useState(500);
+  const [ledger, setLedger] = useState<
+    {
+      id: string;
+      type: string;
+      amountRub: number;
+      balanceAfter: number;
+      description: string;
+      createdAt: string;
+    }[]
+  >([]);
+  const t = dict[uiLang];
+  const TABS = useMemo(() => tabsFor(uiLang), [uiLang]);
+  const BUSINESS_TYPES = BUSINESS_TYPES_I18N[uiLang];
+  const otherLabel = t.other;
+
+  const refreshBilling = useCallback(async () => {
+    try {
+      const res = await fetch("/api/billing");
+      if (!res.ok) return;
+      const data = await res.json();
+      setBalanceRub(Number(data.balanceRub) || 0);
+      setPostPriceRub(Number(data.postPriceRub) || 50);
+      if (Array.isArray(data.topupPresets)) setTopupPresets(data.topupPresets);
+      setYookassaConfigured(Boolean(data.yookassaConfigured));
+      setLedger(Array.isArray(data.ledger) ? data.ledger : []);
+      setUser((u) =>
+        u ? { ...u, balanceRub: Number(data.balanceRub) || 0 } : u
+      );
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(UI_LANG_KEY);
+    if (saved === "en" || saved === "ru") setUiLang(saved);
+  }, []);
+
+  function switchUiLang(next: UiLang) {
+    setUiLang(next);
+    localStorage.setItem(UI_LANG_KEY, next);
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = next;
+    }
+  }
+
+  async function topUpBalance(amount: number) {
+    setPending(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/billing/topup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amountRub: amount }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Ошибка пополнения");
+      if (data.confirmationUrl) {
+        localStorage.setItem("smm-agents-pending-payment", data.paymentId || "");
+        window.location.href = data.confirmationUrl;
+        return;
+      }
+      if (typeof data.balanceRub === "number") setBalanceRub(data.balanceRub);
+      setNotice(
+        data.message ||
+          (uiLang === "en"
+            ? `Balance topped up by ${amount} ₽`
+            : `Баланс пополнен на ${amount} ₽`)
+      );
+      await refreshBilling();
+      setBillingOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setPending(false);
+    }
+  }
 
   const project = useMemo(
     () => projects.find((p) => p.id === projectId) ?? null,
@@ -352,10 +418,13 @@ export default function PlanPage() {
           return;
         }
         setUser(d.user);
-        return refreshProjects();
+        if (typeof d.user.balanceRub === "number") {
+          setBalanceRub(d.user.balanceRub);
+        }
+        return refreshProjects().then(() => refreshBilling());
       })
       .catch(() => setLoaded(true));
-  }, [refreshProjects]);
+  }, [refreshProjects, refreshBilling]);
 
   async function logout() {
     await fetch("/api/auth", {
@@ -385,22 +454,19 @@ export default function PlanPage() {
   }, [projectId, step]);
 
   useEffect(() => {
-    void fetch("/api/meta/status")
-      .then((r) => r.json())
-      .then((data: { stubMode?: boolean }) => {
-        setMetaStubMode(Boolean(data.stubMode));
-      })
-      .catch(() => setMetaStubMode(true));
-  }, []);
-
-  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const metaError = params.get("meta_error");
     const metaOk = params.get("meta_ok");
     const metaStub = params.get("meta_stub");
+    const vkError = params.get("vk_error");
+    const vkPick = params.get("vk_pick");
+    const vkStub = params.get("vk_stub");
+    const vkProjectId = params.get("projectId");
     const stepParam = params.get("step");
+    const billing = params.get("billing");
     if (stepParam === "channels") setStep("channels");
     if (metaError) setError(decodeURIComponent(metaError));
+    if (vkError) setError(decodeURIComponent(vkError));
     if (metaOk) {
       setError(null);
       if (metaStub) {
@@ -410,10 +476,43 @@ export default function PlanPage() {
       }
       void refreshProjects(projectId);
     }
-    if (metaError || metaOk || stepParam) {
+    if (vkPick === "1") {
+      setStep("channels");
+      setVkStubMode(vkStub === "1");
+      if (vkProjectId) setProjectId(vkProjectId);
+      setVkPickOpen(true);
+      void loadVkGroups(vkProjectId || projectId || undefined);
+    }
+    if (billing === "return") {
+      const paymentId = localStorage.getItem("smm-agents-pending-payment");
+      if (paymentId) {
+        void fetch("/api/billing/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (typeof data.balanceRub === "number") {
+              setBalanceRub(data.balanceRub);
+            }
+            setNotice(
+              uiLang === "en"
+                ? "Payment checked. Balance updated if payment succeeded."
+                : "Платёж проверен. Баланс обновлён, если оплата прошла."
+            );
+            localStorage.removeItem("smm-agents-pending-payment");
+            void refreshBilling();
+          })
+          .catch(() => void refreshBilling());
+      } else {
+        void refreshBilling();
+      }
+    }
+    if (metaError || metaOk || vkError || vkPick || stepParam || billing) {
       window.history.replaceState({}, "", "/plan");
     }
-  }, [refreshProjects, projectId]);
+  }, [refreshProjects, refreshBilling, projectId, uiLang]);
 
   async function createNewProject() {
     setPending(true);
@@ -441,6 +540,25 @@ export default function PlanPage() {
     }
   }
 
+  function briefPayload(): BrandBrief {
+    if (!brief) throw new Error("no brief");
+    const postsPerDay = Math.min(
+      5,
+      Math.max(
+        1,
+        brief.postsPerDay ??
+          (Math.round((brief.postsPerWeek || 7) / 7) || 1)
+      )
+    );
+    return {
+      ...brief,
+      postsPerDay,
+      postsPerWeek: postsPerDay * 7,
+      channels: brief.channels.filter((c) => WORKING_CHANNELS.has(c)),
+      websiteUrl: normalizeWebsiteUrl(brief.websiteUrl ?? ""),
+    };
+  }
+
   async function saveBrief() {
     if (!projectId || !brief) return;
     setPending(true);
@@ -449,7 +567,7 @@ export default function PlanPage() {
       const res = await fetch(`/api/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: brief.brandName, brief }),
+        body: JSON.stringify({ name: briefPayload().brandName, brief: briefPayload() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Не сохранено");
@@ -471,19 +589,34 @@ export default function PlanPage() {
       await fetch(`/api/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: brief.brandName, brief }),
+        body: JSON.stringify({ name: briefPayload().brandName, brief: briefPayload() }),
       });
       const res = await fetch(`/api/projects/${projectId}/plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief }),
+        body: JSON.stringify({ brief: briefPayload() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Не удалось собрать план");
+      if (!res.ok) {
+        if (res.status === 402) {
+          setBillingOpen(true);
+          if (typeof data.balanceRub === "number") setBalanceRub(data.balanceRub);
+        }
+        throw new Error(data.error || "Не удалось собрать план");
+      }
       setProjects((prev) =>
         prev.map((p) => (p.id === projectId ? data.project : p))
       );
       setBrief(briefForForm(data.project.brief));
+      if (data.billing?.chargedRub) {
+        setNotice(
+          uiLang === "en"
+            ? `Charged ${data.billing.chargedRub} ₽ for ${data.billing.postsCount} posts. Balance: ${data.billing.balanceRub} ₽`
+            : `Списано ${data.billing.chargedRub} ₽ за ${data.billing.postsCount} постов. Баланс: ${data.billing.balanceRub} ₽`
+        );
+        setBalanceRub(data.billing.balanceRub);
+      }
+      void refreshBilling();
       setStep("plan");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");
@@ -624,7 +757,14 @@ export default function PlanPage() {
       day: draft.day,
       timeZone: brief.timezone,
       takenHours: taken,
-      preferEvening: true,
+      goal: draft.goal as PostGoal,
+      format: draft.format as
+        | "text"
+        | "text_image"
+        | "poll"
+        | "carousel"
+        | "short_video",
+      postIndex: project.drafts.findIndex((d) => d.id === draft.id),
     });
     updateDraft(draft.id, {
       day: slot.day,
@@ -661,7 +801,14 @@ export default function PlanPage() {
         day: draft.day,
         timeZone: brief.timezone,
         takenHours: taken,
-        preferEvening: true,
+        goal: draft.goal as PostGoal,
+        format: draft.format as
+        | "text"
+        | "text_image"
+        | "poll"
+        | "carousel"
+        | "short_video",
+        postIndex: project.drafts.findIndex((d) => d.id === draft.id),
       });
       patch = {
         ...patch,
@@ -735,50 +882,6 @@ export default function PlanPage() {
     }
   }
 
-  function startMetaOAuth(target: "facebook" | "instagram" | "threads") {
-    if (!projectId) return;
-    window.location.href = `/api/meta/start?projectId=${encodeURIComponent(
-      projectId
-    )}&target=${target}`;
-  }
-
-  async function connectMetaStub(
-    channel: "facebook" | "instagram" | "threads"
-  ) {
-    if (!projectId) return;
-    setPending(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/channels`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel, stub: true }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Ошибка");
-      if (data.project) {
-        setProjects((prev) =>
-          prev.map((p) => (p.id === projectId ? data.project : p))
-        );
-        setNotice(
-          `${channel === "facebook" ? "Facebook" : channel === "instagram" ? "Instagram" : "Threads"} подключён как заглушка — можно планировать и тестировать публикацию.`
-        );
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setPending(false);
-    }
-  }
-
-  function startXOauth() {
-    if (!projectId) return;
-    window.location.href = `/api/x/start?projectId=${encodeURIComponent(
-      projectId
-    )}`;
-  }
-
   async function generateDraftVideo(draftId: string) {
     if (!projectId) return;
     setBusyId(draftId);
@@ -805,6 +908,66 @@ export default function PlanPage() {
     }
   }
 
+  async function loadVkGroups(forProjectId?: string) {
+    const pid = forProjectId || projectId;
+    if (!pid) return;
+    setVkPickLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/vk/groups?projectId=${pid}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Не удалось загрузить сообщества");
+      setVkGroups(data.groups ?? []);
+      setVkStubMode(Boolean(data.stub));
+      setVkPickOpen(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка VK");
+      setVkPickOpen(false);
+    } finally {
+      setVkPickLoading(false);
+    }
+  }
+
+  function startVkOAuth() {
+    if (!projectId) return;
+    window.location.href = `/api/vk/start?projectId=${encodeURIComponent(projectId)}`;
+  }
+
+  async function connectVkGroup(groupId: number) {
+    if (!projectId) return;
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/vk/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, groupId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Не подключено");
+      setProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? data.project : p))
+      );
+      setVkPickOpen(false);
+      setVkGroups([]);
+      if (data.stub) {
+        setNotice(
+          uiLang === "en"
+            ? "VK connected in demo mode (stub). Posts will not go to a real community."
+            : "VK подключён в тестовом режиме (заглушка). Посты не уйдут в реальное сообщество."
+        );
+      } else {
+        setNotice(
+          uiLang === "en" ? "VK community connected." : "Сообщество VK подключено."
+        );
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function connectTelegram() {
     if (!projectId) return;
     setPending(true);
@@ -826,34 +989,6 @@ export default function PlanPage() {
       );
       setTgToken("");
       setTgChat("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function connectVk() {
-    if (!projectId) return;
-    setPending(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/channels`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          channel: "vk",
-          accessToken: vkToken,
-          groupId: vkGroup,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Не подключено");
-      setProjects((prev) =>
-        prev.map((p) => (p.id === projectId ? data.project : p))
-      );
-      setVkToken("");
-      setVkGroup("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");
     } finally {
@@ -929,7 +1064,7 @@ export default function PlanPage() {
     return (
       <main className={styles.page}>
         <div className={`container ${styles.layout}`}>
-          <p className={styles.lead}>Загрузка проектов…</p>
+          <p className={styles.lead}>{t.loading}</p>
         </div>
       </main>
     );
@@ -940,14 +1075,48 @@ export default function PlanPage() {
       <header className={styles.top}>
         <div className={`container ${styles.topInner}`}>
           <Link href="/" className={styles.logo}>
-            AgentMark
+            SMM-Agents
           </Link>
           <div className={styles.projectBar}>
+            <div className={styles.langSwitch} role="group" aria-label={t.uiLang}>
+              <button
+                type="button"
+                className={uiLang === "ru" ? styles.langOn : styles.langBtn}
+                onClick={() => switchUiLang("ru")}
+              >
+                RU
+              </button>
+              <button
+                type="button"
+                className={uiLang === "en" ? styles.langOn : styles.langBtn}
+                onClick={() => switchUiLang("en")}
+              >
+                EN
+              </button>
+            </div>
+            <button
+              type="button"
+              className={styles.balanceChip}
+              onClick={() => {
+                setBillingOpen(true);
+                void refreshBilling();
+              }}
+              title={
+                uiLang === "en"
+                  ? "Top up balance"
+                  : "Пополнить баланс"
+              }
+            >
+              <span className={styles.balanceLabel}>
+                {uiLang === "en" ? "Balance" : "Баланс"}
+              </span>
+              <strong>{balanceRub.toLocaleString(uiLang === "en" ? "en-US" : "ru-RU")} ₽</strong>
+            </button>
             {user && (
               <span className={styles.userChip}>
                 {user.name}
                 <button type="button" onClick={logout}>
-                  Выйти
+                  {t.logout}
                 </button>
               </span>
             )}
@@ -958,15 +1127,12 @@ export default function PlanPage() {
       {!project || !brief ? (
         <div className={`container ${styles.layout}`}>
           <section className={`${styles.panel} ${styles.wide}`}>
-            <h1 className={styles.title}>Кабинет AgentMark</h1>
-            <p className={styles.lead}>
-              Создайте бизнес ниже — откроется рабочий стол с контентом,
-              расписанием и каналами.
-            </p>
+            <h1 className={styles.title}>{t.cabinetTitle}</h1>
+            <p className={styles.lead}>{t.cabinetLead}</p>
             <div className={styles.createRow}>
               <input
                 className={styles.createInput}
-                placeholder="Название бизнеса"
+                placeholder={t.businessNamePh}
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
               />
@@ -976,28 +1142,31 @@ export default function PlanPage() {
                 disabled={pending}
                 onClick={createNewProject}
               >
-                Создать бизнес
+                {t.createBusiness}
               </button>
             </div>
             {error && <p className={styles.error}>{error}</p>}
             {trash.length > 0 && (
               <div className={styles.trashBox}>
-                <p className={styles.bizLabel}>Корзина</p>
-                {trash.map((t) => (
-                  <div key={t.id} className={styles.trashRow}>
+                <p className={styles.bizLabel}>{t.trash}</p>
+                {trash.map((item) => (
+                  <div key={item.id} className={styles.trashRow}>
                     <div>
-                      <strong>{t.name}</strong>
+                      <strong>{item.name}</strong>
                       <span className={styles.cellSub}>
-                        удалён {new Date(t.deletedAt).toLocaleString("ru-RU")}
+                        {t.deleted}{" "}
+                        {new Date(item.deletedAt).toLocaleString(
+                          uiLang === "en" ? "en-US" : "ru-RU"
+                        )}
                       </span>
                     </div>
                     <button
                       type="button"
                       className="btn btn-ghost"
                       disabled={pending}
-                      onClick={() => restoreFromTrash(t.id)}
+                      onClick={() => restoreFromTrash(item.id)}
                     >
-                      Восстановить
+                      {t.restore}
                     </button>
                   </div>
                 ))}
@@ -1009,7 +1178,7 @@ export default function PlanPage() {
         <>
           <div className={`container ${styles.workspace}`}>
             <div className={styles.bizSwitch}>
-              <p className={styles.bizLabel}>Бизнес</p>
+              <p className={styles.bizLabel}>{t.business}</p>
               <div className={styles.bizList}>
                 {projects.map((p) => (
                   <button
@@ -1029,7 +1198,9 @@ export default function PlanPage() {
                   >
                     <span className={styles.bizName}>{p.name}</span>
                     <span className={styles.bizNiche}>
-                      {p.brief.niche || "без ниши"}
+                      {p.brief.niche
+                        ? nicheForUi(p.brief.niche, uiLang)
+                        : t.noNiche}
                     </span>
                   </button>
                 ))}
@@ -1037,7 +1208,7 @@ export default function PlanPage() {
               <div className={styles.createRowCompact}>
                 <input
                   className={styles.createInput}
-                  placeholder="Новый бизнес"
+                  placeholder={t.newBusiness}
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                 />
@@ -1077,7 +1248,7 @@ export default function PlanPage() {
                   setError(null);
                 }}
               >
-                Удалить
+                {t.delete}
               </button>
             </div>
             <div className={styles.dashMeta}>
@@ -1085,7 +1256,9 @@ export default function PlanPage() {
                 <strong>{project.name}</strong>
               </span>
               <span className={styles.hideXs}>
-                {brief.niche || "ниша не выбрана"}
+                {brief.niche
+                  ? nicheForUi(brief.niche, uiLang)
+                  : t.nicheNotSet}
               </span>
               <span className={styles.hideXs}>{brief.timezone}</span>
               <span>
@@ -1098,31 +1271,32 @@ export default function PlanPage() {
           <div className={`container ${styles.layout}`}>
             {step === "brief" && (
               <section className={`${styles.panel} ${styles.wide}`}>
-                <p className="eyebrow">Бизнес · {project.name}</p>
-                <h1 className={styles.title}>Профиль бизнеса</h1>
-                <p className={styles.lead}>
-                  Данные для агентов. Можно править в любой момент — не анкета,
-                  а настройки кабинета.
+                <p className="eyebrow">
+                  {t.briefEyebrow} · {project.name}
                 </p>
+                <h1 className={styles.title}>{t.briefTitle}</h1>
+                <p className={styles.lead}>{t.briefLead}</p>
                 {trash.length > 0 && (
                   <div className={styles.trashBox}>
-                    <p className={styles.bizLabel}>Корзина</p>
-                    {trash.map((t) => (
-                      <div key={t.id} className={styles.trashRow}>
+                    <p className={styles.bizLabel}>{t.trash}</p>
+                    {trash.map((item) => (
+                      <div key={item.id} className={styles.trashRow}>
                         <div>
-                          <strong>{t.name}</strong>
+                          <strong>{item.name}</strong>
                           <span className={styles.cellSub}>
-                            удалён{" "}
-                            {new Date(t.deletedAt).toLocaleString("ru-RU")}
+                            {t.deleted}{" "}
+                            {new Date(item.deletedAt).toLocaleString(
+                              uiLang === "en" ? "en-US" : "ru-RU"
+                            )}
                           </span>
                         </div>
                         <button
                           type="button"
                           className="btn btn-ghost"
                           disabled={pending}
-                          onClick={() => restoreFromTrash(t.id)}
+                          onClick={() => restoreFromTrash(item.id)}
                         >
-                          Восстановить
+                          {t.restore}
                         </button>
                       </div>
                     ))}
@@ -1130,32 +1304,35 @@ export default function PlanPage() {
                 )}
                 {!project.plan && !project.drafts.length && (
                   <p className={styles.scheduleNote}>
-                    План и тексты нужно собрать заново. Ранее сгенерированные
-                    фото в папке медиа сохранились — после сборки можно
-                    перегенерировать. Telegram/VK подключите снова в «Каналы».
+                    {uiLang === "en"
+                      ? "Plan and texts need to be rebuilt. Previously generated media may remain — regenerate after rebuild. Reconnect Telegram/VK in Channels."
+                      : "План и тексты нужно собрать заново. Ранее сгенерированные фото в папке медиа сохранились — после сборки можно перегенерировать. Telegram/VK подключите снова в «Каналы»."}
                   </p>
                 )}
 
                 <div className={styles.form}>
                   <label>
-                    Название бизнеса
+                    {t.brandName}
                     <input
                       value={brief.brandName}
                       onChange={(e) =>
                         setBrief({ ...brief, brandName: e.target.value })
                       }
-                      placeholder="например: Кофейня Утро"
+                      placeholder={t.brandNamePh}
                     />
                   </label>
                   <label className={styles.full}>
-                    Тип бизнеса
+                    {t.businessType}
                     <div className={styles.typeGrid}>
                       {BUSINESS_TYPES.map((type) => {
+                        const displayNiche = nicheForUi(brief.niche, uiLang);
                         const active =
-                          brief.niche === type ||
-                          (type === "Другое" &&
+                          displayNiche === type ||
+                          (type === otherLabel &&
                             brief.niche !== "" &&
-                            !BUSINESS_TYPES.includes(brief.niche));
+                            !BUSINESS_TYPES.includes(displayNiche) &&
+                            !BUSINESS_TYPES_I18N.ru.includes(brief.niche) &&
+                            !BUSINESS_TYPES_I18N.en.includes(brief.niche));
                         return (
                           <button
                             key={type}
@@ -1166,7 +1343,10 @@ export default function PlanPage() {
                             onClick={() =>
                               setBrief({
                                 ...brief,
-                                niche: type === "Другое" ? "" : type,
+                                niche:
+                                  type === otherLabel
+                                    ? ""
+                                    : nicheToCanonical(type),
                               })
                             }
                           >
@@ -1177,17 +1357,22 @@ export default function PlanPage() {
                     </div>
                   </label>
                   <label className={styles.full}>
-                    Ниша своими словами
+                    {t.nicheCustom}
                     <input
-                      value={brief.niche}
+                      value={
+                        BUSINESS_TYPES_I18N.ru.includes(brief.niche) ||
+                        BUSINESS_TYPES_I18N.en.includes(brief.niche)
+                          ? ""
+                          : brief.niche
+                      }
                       onChange={(e) =>
                         setBrief({ ...brief, niche: e.target.value })
                       }
-                      placeholder="уточните, если выбрали «Другое» или хотите точнее"
+                      placeholder={t.nichePh}
                     />
                   </label>
                   <label>
-                    Часовой пояс
+                    {t.timezone}
                     <select
                       value={brief.timezone}
                       onChange={(e) =>
@@ -1202,22 +1387,132 @@ export default function PlanPage() {
                     </select>
                   </label>
                   <label>
-                    Сколько постов в неделю
-                    <input
-                      type="number"
-                      min={4}
-                      max={14}
-                      value={brief.postsPerWeek}
+                    {t.audienceLang}
+                    <select
+                      value={brief.language || "ru"}
                       onChange={(e) =>
-                        setBrief({
-                          ...brief,
-                          postsPerWeek: Number(e.target.value) || 7,
-                        })
+                        setBrief({ ...brief, language: e.target.value })
                       }
-                    />
+                    >
+                      {AUDIENCE_LANGUAGES.map((lang) => (
+                        <option key={lang.id} value={lang.id}>
+                          {uiLang === "en" ? lang.labelEn : lang.labelRu}
+                        </option>
+                      ))}
+                    </select>
+                    <span className={styles.fieldHint}>{t.audienceLangHint}</span>
                   </label>
+                  <div className={`${styles.full} ${styles.freqCard}`}>
+                    <div className={styles.freqHead}>
+                      <div>
+                        <p className={styles.freqTitle}>{t.freqTitle}</p>
+                        <p className={styles.fieldHint}>{t.postsPerDayHint}</p>
+                      </div>
+                      <div className={styles.freqSummary}>
+                        <span>
+                          <strong>
+                            {brief.postsPerDay ??
+                              Math.max(
+                                1,
+                                Math.round((brief.postsPerWeek || 7) / 7)
+                              )}
+                          </strong>{" "}
+                          {t.freqPerDay}
+                        </span>
+                        <span>
+                          <strong>{brief.postsPerWeek}</strong> {t.freqPerWeek}
+                        </span>
+                        <span>
+                          <strong>
+                            {(brief.postsPerWeek * postPriceRub).toLocaleString(
+                              uiLang === "en" ? "en-US" : "ru-RU"
+                            )}{" "}
+                            ₽
+                          </strong>{" "}
+                          {t.freqCost}
+                        </span>
+                      </div>
+                    </div>
+                    <div className={styles.freqPresets} role="group" aria-label={t.postsPerDay}>
+                      {[
+                        { day: 1, label: t.freqPresetLight },
+                        { day: 2, label: t.freqPresetNorm },
+                        { day: 3, label: t.freqPresetActive },
+                        { day: 5, label: t.freqPresetHot },
+                      ].map(({ day, label }) => {
+                        const active =
+                          (brief.postsPerDay ??
+                            Math.max(
+                              1,
+                              Math.round((brief.postsPerWeek || 7) / 7)
+                            )) === day;
+                        const week = day * 7;
+                        const cost = week * postPriceRub;
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            className={
+                              active ? styles.freqPresetOn : styles.freqPreset
+                            }
+                            onClick={() =>
+                              setBrief({
+                                ...brief,
+                                postsPerDay: day,
+                                postsPerWeek: week,
+                              })
+                            }
+                          >
+                            <span className={styles.freqPresetLabel}>{label}</span>
+                            <span className={styles.freqPresetMain}>
+                              {day} {t.freqPerDay}
+                            </span>
+                            <span className={styles.freqPresetSub}>
+                              {week} {t.freqPerWeek} · {cost} ₽
+                            </span>
+                            <span className={styles.freqDots} aria-hidden>
+                              {Array.from({ length: day }).map((_, i) => (
+                                <i key={i} />
+                              ))}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className={styles.freqWeek} aria-hidden>
+                      {(uiLang === "en"
+                        ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                        : ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+                      ).map((d) => {
+                        const n =
+                          brief.postsPerDay ??
+                          Math.max(1, Math.round((brief.postsPerWeek || 7) / 7));
+                        return (
+                          <div key={d} className={styles.freqDay}>
+                            <span>{d}</span>
+                            <div className={styles.freqDayDots}>
+                              {Array.from({ length: n }).map((_, i) => (
+                                <i key={i} />
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p
+                      className={
+                        balanceRub >= brief.postsPerWeek * postPriceRub
+                          ? styles.freqOk
+                          : styles.freqWarn
+                      }
+                    >
+                      {balanceRub >= brief.postsPerWeek * postPriceRub
+                        ? `${t.freqEnough} · ${balanceRub.toLocaleString(uiLang === "en" ? "en-US" : "ru-RU")} ₽`
+                        : `${t.freqNeedTopup}: ${(brief.postsPerWeek * postPriceRub - balanceRub).toLocaleString(uiLang === "en" ? "en-US" : "ru-RU")} ₽`}
+                    </p>
+                  </div>
                   <label>
-                    С какой даты начать
+                    {t.startDate}
                     <input
                       type="date"
                       value={brief.startDate}
@@ -1227,17 +1522,34 @@ export default function PlanPage() {
                     />
                   </label>
                   <label className={styles.full}>
-                    Что предлагаете клиентам
+                    {t.offer}
                     <input
                       value={brief.offer}
                       onChange={(e) =>
                         setBrief({ ...brief, offer: e.target.value })
                       }
-                      placeholder="например: авторский кофе и выпечка"
+                      placeholder={t.offerPh}
                     />
                   </label>
                   <label className={styles.full}>
-                    Стиль общения (через запятую)
+                    {t.websiteUrl}
+                    <input
+                      type="url"
+                      inputMode="url"
+                      value={brief.websiteUrl ?? ""}
+                      onChange={(e) =>
+                        setBrief({ ...brief, websiteUrl: e.target.value })
+                      }
+                      placeholder={t.websiteUrlPh}
+                    />
+                    <span className={styles.fieldHint}>{t.websiteUrlHint}</span>
+                    {brief.websiteUrl?.trim() &&
+                      !isValidWebsiteUrl(brief.websiteUrl) && (
+                        <span className={styles.fieldHint}>{t.websiteUrlInvalid}</span>
+                      )}
+                  </label>
+                  <label className={styles.full}>
+                    {t.tone}
                     <input
                       value={toneText}
                       onChange={(e) =>
@@ -1249,11 +1561,11 @@ export default function PlanPage() {
                             .filter(Boolean),
                         })
                       }
-                      placeholder="тёплый, простой, без пафоса"
+                      placeholder={t.tonePh}
                     />
                   </label>
                   <label className={styles.full}>
-                    Кто ваши клиенты
+                    {t.audienceWho}
                     <input
                       value={brief.audience.who}
                       onChange={(e) =>
@@ -1262,11 +1574,11 @@ export default function PlanPage() {
                           audience: { ...brief.audience, who: e.target.value },
                         })
                       }
-                      placeholder="например: офисные рядом, 25–40 лет"
+                      placeholder={t.audienceWhoPh}
                     />
                   </label>
                   <label className={styles.full}>
-                    Какая у них проблема
+                    {t.audiencePain}
                     <input
                       value={brief.audience.pain}
                       onChange={(e) =>
@@ -1275,11 +1587,11 @@ export default function PlanPage() {
                           audience: { ...brief.audience, pain: e.target.value },
                         })
                       }
-                      placeholder="например: устали от рекламных постов"
+                      placeholder={t.audiencePainPh}
                     />
                   </label>
                   <label className={styles.full}>
-                    Чего они хотят
+                    {t.audienceDesire}
                     <input
                       value={brief.audience.desire}
                       onChange={(e) =>
@@ -1291,27 +1603,39 @@ export default function PlanPage() {
                           },
                         })
                       }
-                      placeholder="например: полезные советы и атмосферу"
+                      placeholder={t.audienceDesirePh}
                     />
                   </label>
                   <fieldset className={styles.full}>
-                    <legend>Куда публиковать</legend>
+                    <legend>{t.publishWhere}</legend>
                     <div className={styles.channels}>
                       {CHANNELS.map((ch) => {
+                        const working = WORKING_CHANNELS.has(ch.id);
                         const active = brief.channels.includes(ch.id);
                         return (
                           <button
                             key={ch.id}
                             type="button"
-                            className={active ? styles.chipOn : styles.chip}
-                            onClick={() =>
+                            disabled={!working}
+                            className={
+                              !working
+                                ? styles.chipSoon
+                                : active
+                                  ? styles.chipOn
+                                  : styles.chip
+                            }
+                            onClick={() => {
+                              if (!working) return;
                               setBrief({
                                 ...brief,
                                 channels: toggleChannel(brief.channels, ch.id),
-                              })
-                            }
+                              });
+                            }}
                           >
                             {ch.label}
+                            {!working && (
+                              <span className={styles.soonTag}>{t.soon}</span>
+                            )}
                           </button>
                         );
                       })}
@@ -1320,6 +1644,7 @@ export default function PlanPage() {
                 </div>
 
                 {error && <p className={styles.error}>{error}</p>}
+                {notice && <p className={styles.notice}>{notice}</p>}
                 <div className={styles.actions}>
                   <button
                     type="button"
@@ -1327,15 +1652,38 @@ export default function PlanPage() {
                     disabled={pending}
                     onClick={saveBrief}
                   >
-                    Сохранить
+                    {t.save}
                   </button>
                   <button
                     type="button"
                     className="btn"
                     disabled={pending}
-                    onClick={generatePlan}
+                    onClick={() => {
+                      if (balanceRub < brief.postsPerWeek * postPriceRub) {
+                        setBillingOpen(true);
+                        setError(
+                          uiLang === "en"
+                            ? `Need ${brief.postsPerWeek * postPriceRub} ₽, balance ${balanceRub} ₽`
+                            : `Нужно ${brief.postsPerWeek * postPriceRub} ₽, на балансе ${balanceRub} ₽`
+                        );
+                        return;
+                      }
+                      void generatePlan();
+                    }}
                   >
-                    {pending ? "Готовим план…" : "Составить план на неделю"}
+                    {pending
+                      ? t.makingPlan
+                      : `${t.makePlan} · ${brief.postsPerWeek * postPriceRub} ₽`}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      setBillingOpen(true);
+                      void refreshBilling();
+                    }}
+                  >
+                    {uiLang === "en" ? "Top up" : "Пополнить"}
                   </button>
                   <button
                     type="button"
@@ -1346,7 +1694,7 @@ export default function PlanPage() {
                       setError(null);
                     }}
                   >
-                    Удалить бизнес
+                    {t.deleteBusiness}
                   </button>
                 </div>
               </section>
@@ -1857,20 +2205,9 @@ export default function PlanPage() {
 
             {step === "channels" && (
               <section className={`${styles.panel} ${styles.wide}`}>
-                <p className="eyebrow">Соцсети этого бизнеса</p>
-                <h1 className={styles.title}>Подключите каналы</h1>
-                <p className={styles.lead}>
-                  Telegram и VK — токены вручную. Facebook, Instagram и Threads —
-                  {metaStubMode
-                    ? " сейчас работают в тестовом режиме (заглушка): подключение без Meta, публикация имитируется."
-                    : " вход через официальный логин Meta (пароль вводите только у Meta). Для тестов нужен HTTPS через ngrok и Meta App."}
-                </p>
-                {metaStubMode && (
-                  <p className={styles.stubBanner}>
-                    Meta API не настроен — используйте кнопку «Подключить (тест)».
-                    Когда появятся ключи в .env, включится настоящий OAuth.
-                  </p>
-                )}
+                <p className="eyebrow">{t.channelsEyebrow}</p>
+                <h1 className={styles.title}>{t.channelsTitle}</h1>
+                <p className={styles.lead}>{t.channelsLead}</p>
                 {notice && <p className={styles.notice}>{notice}</p>}
 
                 <div className={styles.channelCards}>
@@ -1881,29 +2218,35 @@ export default function PlanPage() {
                         {project.channels.telegram.connected ? "✓" : "—"}
                       </h3>
                       <ChannelHelp
-                        title="Как подключить Telegram"
+                        title={
+                          uiLang === "en"
+                            ? "How to connect Telegram"
+                            : "Как подключить Telegram"
+                        }
                         steps={TELEGRAM_HELP}
                       />
                     </div>
                     {project.channels.telegram.connected ? (
                       <>
                         <p>
-                          Канал: {project.channels.telegram.chatId}
+                          {uiLang === "en" ? "Channel" : "Канал"}:{" "}
+                          {project.channels.telegram.chatId}
                           <br />
-                          Токен: {project.channels.telegram.botTokenMasked}
+                          {uiLang === "en" ? "Token" : "Токен"}:{" "}
+                          {project.channels.telegram.botTokenMasked}
                         </p>
                         <button
                           type="button"
                           className="btn btn-ghost"
                           onClick={() => disconnectChannel("telegram")}
                         >
-                          Отключить
+                          {t.disconnect}
                         </button>
                       </>
                     ) : (
                       <div className={styles.form}>
                         <label className={styles.full}>
-                          Токен бота
+                          {t.botToken}
                           <input
                             value={tgToken}
                             onChange={(e) => setTgToken(e.target.value)}
@@ -1911,11 +2254,11 @@ export default function PlanPage() {
                           />
                         </label>
                         <label className={styles.full}>
-                          Chat ID канала или группы
+                          {t.chatId}
                           <input
                             value={tgChat}
                             onChange={(e) => setTgChat(e.target.value)}
-                            placeholder="@mychannel или -100..."
+                            placeholder="@mychannel or -100..."
                           />
                         </label>
                         <button
@@ -1924,7 +2267,7 @@ export default function PlanPage() {
                           disabled={pending}
                           onClick={connectTelegram}
                         >
-                          Подключить Telegram
+                          {t.connectTelegram}
                         </button>
                       </div>
                     )}
@@ -1935,267 +2278,78 @@ export default function PlanPage() {
                       <h3>
                         VK {project.channels.vk.connected ? "✓" : "—"}
                       </h3>
-                      <ChannelHelp title="Как подключить VK" steps={VK_HELP} />
+                      <ChannelHelp
+                        title={
+                          uiLang === "en"
+                            ? "How to connect VK"
+                            : "Как подключить VK"
+                        }
+                        steps={VK_HELP}
+                      />
                     </div>
                     {project.channels.vk.connected ? (
                       <>
                         <p>
-                          Группа: {project.channels.vk.groupId}
-                          <br />
-                          Токен: {project.channels.vk.accessTokenMasked}
+                          {uiLang === "en" ? "Community" : "Сообщество"}:{" "}
+                          {project.channels.vk.groupName ||
+                            project.channels.vk.groupId}
+                          {project.channels.vk.isStub && (
+                            <>
+                              <br />
+                              <span className={styles.soonNote}>
+                                {uiLang === "en" ? "Demo mode" : "Тестовый режим"}
+                              </span>
+                            </>
+                          )}
                         </p>
                         <button
                           type="button"
                           className="btn btn-ghost"
                           onClick={() => disconnectChannel("vk")}
                         >
-                          Отключить
+                          {t.disconnect}
                         </button>
                       </>
                     ) : (
                       <div className={styles.form}>
-                        <label className={styles.full}>
-                          Токен сообщества
-                          <input
-                            value={vkToken}
-                            onChange={(e) => setVkToken(e.target.value)}
-                            placeholder="токен с правом «Стена»"
-                          />
-                        </label>
-                        <label className={styles.full}>
-                          ID группы
-                          <input
-                            value={vkGroup}
-                            onChange={(e) => setVkGroup(e.target.value)}
-                            placeholder="число без минуса, например 123456"
-                          />
-                        </label>
+                        <p className={styles.fieldHint}>
+                          {uiLang === "en"
+                            ? "Log in with VK and pick a community — like in other apps."
+                            : "Войдите через VK и выберите сообщество — как в других приложениях."}
+                        </p>
                         <button
                           type="button"
                           className="btn"
-                          disabled={pending}
-                          onClick={connectVk}
+                          disabled={pending || vkPickLoading}
+                          onClick={startVkOAuth}
                         >
-                          Подключить VK
+                          {vkPickLoading ? "…" : t.connectVk}
                         </button>
                       </div>
                     )}
                   </article>
 
-                  <article className={styles.channelCard}>
-                    <div className={styles.channelCardHead}>
-                      <h3>
-                        Facebook{" "}
-                        {project.channels.facebook?.connected ? "✓" : "—"}
-                      </h3>
-                      <ChannelHelp
-                        title="Как подключить Facebook"
-                        steps={META_FB_HELP}
-                      />
-                    </div>
-                    {project.channels.facebook?.connected ? (
-                      <>
-                        <p>
-                          Page: {project.channels.facebook.pageName}
-                          {project.channels.facebook.isStub ? " · заглушка" : ""}
-                          <br />
-                          ID: {project.channels.facebook.pageId}
-                        </p>
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          onClick={() => disconnectChannel("facebook")}
-                        >
-                          Отключить
-                        </button>
-                      </>
-                    ) : (
-                      <div className={styles.channelActions}>
-                        {metaStubMode ? (
-                          <button
-                            type="button"
-                            className="btn"
-                            disabled={pending}
-                            onClick={() => connectMetaStub("facebook")}
-                          >
-                            Подключить (тест)
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              className="btn"
-                              onClick={() => startMetaOAuth("facebook")}
-                            >
-                              Войти через Meta
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              disabled={pending}
-                              onClick={() => connectMetaStub("facebook")}
-                            >
-                              Заглушка
-                            </button>
-                          </>
-                        )}
+                  {(
+                    [
+                      "Facebook",
+                      "Instagram",
+                      "Threads",
+                      "X",
+                    ] as const
+                  ).map((name) => (
+                    <article
+                      key={name}
+                      className={`${styles.channelCard} ${styles.channelSoon}`}
+                    >
+                      <div className={styles.channelCardHead}>
+                        <h3>
+                          {name}{" "}
+                          <span className={styles.soonBadge}>{t.channelSoon}</span>
+                        </h3>
                       </div>
-                    )}
-                  </article>
-
-                  <article className={styles.channelCard}>
-                    <div className={styles.channelCardHead}>
-                      <h3>
-                        Instagram{" "}
-                        {project.channels.instagram?.connected ? "✓" : "—"}
-                      </h3>
-                      <ChannelHelp
-                        title="Как подключить Instagram"
-                        steps={META_IG_HELP}
-                      />
-                    </div>
-                    {project.channels.instagram?.connected ? (
-                      <>
-                        <p>
-                          Page: {project.channels.instagram.pageName}
-                          {project.channels.instagram.isStub
-                            ? " · заглушка"
-                            : ""}
-                          <br />
-                          IG ID: {project.channels.instagram.igUserId}
-                        </p>
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          onClick={() => disconnectChannel("instagram")}
-                        >
-                          Отключить
-                        </button>
-                      </>
-                    ) : (
-                      <div className={styles.channelActions}>
-                        {metaStubMode ? (
-                          <button
-                            type="button"
-                            className="btn"
-                            disabled={pending}
-                            onClick={() => connectMetaStub("instagram")}
-                          >
-                            Подключить (тест)
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              className="btn"
-                              onClick={() => startMetaOAuth("instagram")}
-                            >
-                              Войти через Meta
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              disabled={pending}
-                              onClick={() => connectMetaStub("instagram")}
-                            >
-                              Заглушка
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </article>
-
-                  <article className={styles.channelCard}>
-                    <div className={styles.channelCardHead}>
-                      <h3>
-                        Threads {project.channels.threads?.connected ? "✓" : "—"}
-                      </h3>
-                      <ChannelHelp
-                        title="Как подключить Threads"
-                        steps={META_THREADS_HELP}
-                      />
-                    </div>
-                    {project.channels.threads?.connected ? (
-                      <>
-                        <p>
-                          @{project.channels.threads.username || "threads"}
-                          {project.channels.threads.isStub ? " · заглушка" : ""}
-                          <br />
-                          ID: {project.channels.threads.threadsUserId}
-                        </p>
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          onClick={() => disconnectChannel("threads")}
-                        >
-                          Отключить
-                        </button>
-                      </>
-                    ) : (
-                      <div className={styles.channelActions}>
-                        {metaStubMode ? (
-                          <button
-                            type="button"
-                            className="btn"
-                            disabled={pending}
-                            onClick={() => connectMetaStub("threads")}
-                          >
-                            Подключить (тест)
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              className="btn"
-                              onClick={() => startMetaOAuth("threads")}
-                            >
-                              Войти через Meta
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              disabled={pending}
-                              onClick={() => connectMetaStub("threads")}
-                            >
-                              Заглушка
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </article>
-
-                  <article className={styles.channelCard}>
-                    <div className={styles.channelCardHead}>
-                      <h3>X {project.channels.x?.connected ? "✓" : "—"}</h3>
-                      <ChannelHelp title="Как подключить X" steps={X_HELP} />
-                    </div>
-                    {project.channels.x?.connected ? (
-                      <>
-                        <p>
-                          @{project.channels.x.username || "x"}
-                          <br />
-                          {project.channels.x.name || ""}
-                        </p>
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          onClick={() => disconnectChannel("x")}
-                        >
-                          Отключить
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={startXOauth}
-                      >
-                        Войти через X
-                      </button>
-                    )}
-                  </article>
+                      <p className={styles.soonNote}>{t.channelSoonNote}</p>
+                    </article>
+                  ))}
                 </div>
                 {error && <p className={styles.error}>{error}</p>}
               </section>
@@ -2219,6 +2373,76 @@ export default function PlanPage() {
               </button>
             ))}
           </nav>
+
+          {vkPickOpen && (
+            <div
+              className={styles.modalBackdrop}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="vk-pick-title"
+            >
+              <div className={styles.modalCard}>
+                <h2 id="vk-pick-title">
+                  {uiLang === "en" ? "Choose VK community" : "Выберите сообщество VK"}
+                </h2>
+                <p>
+                  {vkStubMode
+                    ? uiLang === "en"
+                      ? "Demo communities (VK keys not configured)."
+                      : "Тестовые сообщества (ключи VK не настроены)."
+                    : uiLang === "en"
+                      ? "Pick where posts should be published."
+                      : "Куда публиковать посты на стену."}
+                </p>
+                {vkPickLoading ? (
+                  <p>{uiLang === "en" ? "Loading…" : "Загружаем…"}</p>
+                ) : (
+                  <div className={styles.vkGroupList}>
+                    {vkGroups.map((g) => (
+                      <button
+                        key={g.id}
+                        type="button"
+                        className={styles.vkGroupRow}
+                        disabled={pending}
+                        onClick={() => void connectVkGroup(g.id)}
+                      >
+                        {g.photo50 ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={g.photo50}
+                            alt=""
+                            className={styles.vkGroupAvatar}
+                          />
+                        ) : (
+                          <span className={styles.vkGroupAvatar} aria-hidden>
+                            VK
+                          </span>
+                        )}
+                        <span className={styles.vkGroupMeta}>
+                          <strong>{g.name}</strong>
+                          {g.screenName && <span>vk.com/{g.screenName}</span>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {error && <p className={styles.error}>{error}</p>}
+                <div className={styles.modalActions}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      setVkPickOpen(false);
+                      setVkGroups([]);
+                      setError(null);
+                    }}
+                  >
+                    {uiLang === "en" ? "Cancel" : "Отмена"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {deleteOpen && project && (
             <div
@@ -2271,8 +2495,119 @@ export default function PlanPage() {
               </div>
             </div>
           )}
+
+
         </>
       )}
+
+      {billingOpen && (
+            <div
+              className={styles.modalBackdrop}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="billing-title"
+            >
+              <div className={styles.modalCard}>
+                <h2 id="billing-title">
+                  {uiLang === "en" ? "Payment profile" : "Профиль оплаты"}
+                </h2>
+                <p>
+                  {uiLang === "en" ? "Balance" : "Баланс"}:{" "}
+                  <strong>
+                    {balanceRub.toLocaleString(
+                      uiLang === "en" ? "en-US" : "ru-RU"
+                    )}{" "}
+                    ₽
+                  </strong>
+                </p>
+                <p className={styles.modalHint}>
+                  {uiLang === "en"
+                    ? `${postPriceRub} ₽ per post — charged before the marketer builds the weekly plan.`
+                    : `${postPriceRub} ₽ за пост — списываем перед тем, как маркетолог составит план на неделю.`}
+                </p>
+                {!yookassaConfigured && (
+                  <p className={styles.stubBanner}>
+                    {uiLang === "en"
+                      ? "YooKassa is not configured — top-ups go to demo balance."
+                      : "ЮKassa не настроена — пополнение идёт в демо-баланс."}
+                  </p>
+                )}
+                <p className={styles.bizLabel}>
+                  {uiLang === "en" ? "Top up" : "Пополнить"}
+                </p>
+                <div className={styles.topupGrid}>
+                  {topupPresets.map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      className={
+                        topupAmount === amount ? styles.typeOn : styles.typeChip
+                      }
+                      onClick={() => setTopupAmount(amount)}
+                    >
+                      {amount} ₽
+                    </button>
+                  ))}
+                </div>
+                <label>
+                  {uiLang === "en" ? "Custom amount" : "Своя сумма"}
+                  <input
+                    type="number"
+                    min={50}
+                    max={100000}
+                    value={topupAmount}
+                    onChange={(e) =>
+                      setTopupAmount(Number(e.target.value) || 50)
+                    }
+                  />
+                </label>
+                {ledger.length > 0 && (
+                  <div className={styles.ledgerBox}>
+                    <p className={styles.bizLabel}>
+                      {uiLang === "en" ? "History" : "История"}
+                    </p>
+                    {ledger.slice(0, 6).map((row) => (
+                      <div key={row.id} className={styles.ledgerRow}>
+                        <span>
+                          {row.amountRub > 0 ? "+" : ""}
+                          {row.amountRub} ₽ — {row.description}
+                        </span>
+                        <span className={styles.cellSub}>
+                          {new Date(row.createdAt).toLocaleString(
+                            uiLang === "en" ? "en-US" : "ru-RU"
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className={styles.modalActions}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => setBillingOpen(false)}
+                  >
+                    {uiLang === "en" ? "Close" : "Закрыть"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={pending || topupAmount < 50}
+                    onClick={() => topUpBalance(topupAmount)}
+                  >
+                    {pending
+                      ? uiLang === "en"
+                        ? "Processing…"
+                        : "Оформляем…"
+                      : uiLang === "en"
+                        ? `Pay ${topupAmount} ₽`
+                        : `Оплатить ${topupAmount} ₽`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
     </main>
   );
 }

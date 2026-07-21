@@ -1,13 +1,13 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
-const COOKIE = "agentmark_session";
+const COOKIE = "smm_agents_session";
 const MAX_AGE_SEC = 60 * 60 * 24 * 30; // 30 days
 
 function secret(): string {
   return (
     process.env.AUTH_SECRET?.trim() ||
     process.env.DEEPSEEK_API_KEY?.trim() ||
-    "agentmark-dev-secret-change-me"
+    "smm-agents-dev-secret-change-me"
   );
 }
 

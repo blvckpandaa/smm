@@ -1,10 +1,9 @@
-import type { Channel } from "@/lib/marketer/types";
+import type { Channel, PostGoal, RubricId } from "@/lib/marketer/types";
+import { CHANNEL_WINDOWS, formatHm } from "@/lib/marketer/posting-times";
 import {
-  CHANNEL_WINDOWS,
-  WEEKDAY_MULTIPLIER,
-  formatHm,
-  pickMinute,
-} from "@/lib/marketer/posting-times";
+  pickIdealSlot,
+  weekHoursFromTaken,
+} from "@/lib/marketer/pick-slot";
 import {
   fromZonedTime,
   weekdayIndexFromYmd,
@@ -28,53 +27,41 @@ export type PickedSlot = {
   why: string;
 };
 
-/** Подбирает лучшее локальное время для канала в указанный день (или ближайший свободный час). */
+/** Подбирает лучшее локальное время для канала в указанный день. */
 export function pickBestSlot(options: {
   channel: Channel;
   day: string;
   timeZone: string;
   takenHours?: Set<string>;
-  preferEvening?: boolean;
+  goal?: PostGoal;
+  rubric?: RubricId;
+  format?: "text" | "text_image" | "poll" | "carousel" | "short_video";
+  postIndex?: number;
 }): PickedSlot {
   const { channel, day, timeZone } = options;
-  const taken = options.takenHours ?? new Set<string>();
-  const dow = weekdayIndexFromYmd(day);
-  const windows = CHANNEL_WINDOWS[channel] ?? CHANNEL_WINDOWS.telegram;
+  const takenOnDay = new Set(options.takenHours ?? []);
+  const takenWeekHours = weekHoursFromTaken(takenOnDay);
 
-  let best: { hour: number; minute: number; why: string; score: number } | null =
-    null;
+  const slot = pickIdealSlot({
+    channel,
+    ymd: day,
+    goal: options.goal ?? "awareness",
+    rubric: options.rubric ?? "education",
+    format: options.format ?? "text_image",
+    postIndex: options.postIndex ?? 0,
+    takenOnDay,
+    takenWeekHours,
+  });
 
-  for (const w of windows) {
-    for (let hour = w.start; hour < w.end; hour++) {
-      const key = `${channel}:${day}:${hour}`;
-      if (taken.has(key)) continue;
-      const minute = pickMinute(channel, hour);
-      let score = w.score * (WEEKDAY_MULTIPLIER[dow] ?? 1);
-      if (options.preferEvening && hour >= 18) score *= 1.12;
-      if (!best || score > best.score) {
-        best = { hour, minute, why: w.label, score };
-      }
-    }
-  }
-
-  if (!best) {
-    best = {
-      hour: 19,
-      minute: pickMinute(channel, 19),
-      why: "вечерний слот по умолчанию",
-      score: 50,
-    };
-  }
-
-  const timeLocal = formatHm(best.hour, best.minute);
-  const when = fromZonedTime(day, best.hour, best.minute, timeZone);
+  const timeLocal = formatHm(slot.hour, slot.minute);
+  const when = fromZonedTime(day, slot.hour, slot.minute, timeZone);
 
   return {
     day,
     timeLocal,
     scheduledAtIso: when.toISOString(),
-    weekday: WEEKDAYS_RU[dow],
-    why: `${best.why} · ${timeLocal} ${timeZone}`,
+    weekday: WEEKDAYS_RU[weekdayIndexFromYmd(day)],
+    why: `${slot.why} · ${timeLocal} ${timeZone}`,
   };
 }
 

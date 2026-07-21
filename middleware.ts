@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const COOKIE = "agentmark_session";
+const COOKIE = "smm_agents_session";
 
 /** Soft gate: cookie must exist. Signature checked on API (Node). */
 export function middleware(req: NextRequest) {

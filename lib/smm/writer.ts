@@ -1,14 +1,15 @@
 import { deepseekChat, extractJson, isDeepSeekConfigured } from "@/lib/ai/client";
 import type { BrandBrief, ContentPlan, PlannedPost } from "@/lib/marketer/types";
 import { draftNeedsPhoto } from "./photo";
+import { normalizeWebsiteUrl } from "@/lib/marketer/website";
 import type { PostDraft, WritePostsInput } from "./types";
 
-const SYSTEM = `Ты агент-SMM платформы AgentMark.
+const SYSTEM = `Ты агент-SMM платформы SMM-Agents.
 Пишешь готовые тексты постов по контент-плану маркетолога.
 
 Правила:
 - Отвечай ТОЛЬКО валидным JSON
-- Язык: как в брифе (обычно русский)
+- Язык постов: строго language из брифа (ru/en/kk и т.д.). Не смешивай языки.
 - Один пост = одна мысль, без воды
 - Начни с хука из плана или усиль его
 - Учитывай канал: telegram — можно чуть длиннее; vk/instagram — короче; threads — очень коротко
@@ -17,6 +18,7 @@ const SYSTEM = `Ты агент-SMM платформы AgentMark.
 - Не выдумывай факты, цены, акции — нет данных → [уточнить]
 - Соблюдай Tone of Voice и табу
 - CTA в конце естественно
+- Если в брифе есть websiteUrl — вставляй ссылку в CTA и в текст, где уместно (оффер, awareness, призыв перейти). Не дублируй ссылку в каждой строке
 - Без markdown-разметки в body (можно эмодзи умеренно, если тон позволяет)
 
 Формат:
@@ -33,6 +35,7 @@ const SYSTEM = `Ты агент-SMM платформы AgentMark.
 }`;
 
 function localFallback(brief: BrandBrief, post: PlannedPost): PostDraft {
+  const site = normalizeWebsiteUrl(brief.websiteUrl ?? "");
   const lines = [
     post.hook,
     "",
@@ -41,7 +44,12 @@ function localFallback(brief: BrandBrief, post: PlannedPost): PostDraft {
     `Тема: ${post.topic}`,
     brief.offer ? `О нас: ${brief.offer}` : "",
     "",
-    post.cta,
+    site && /сайт|site|link|перейти|узнать|подробн/i.test(post.cta)
+      ? `${post.cta}: ${site}`
+      : post.cta,
+    site && !/сайт|site|link|перейти|узнать|подробн/i.test(post.cta) && post.goal === "offer"
+      ? site
+      : "",
   ].filter(Boolean);
 
   return {
@@ -133,6 +141,7 @@ export async function writePostsFromPlan(
             audience: brief.audience,
             toneOfVoice: brief.toneOfVoice,
             offer: brief.offer,
+            websiteUrl: normalizeWebsiteUrl(brief.websiteUrl ?? ""),
             taboos: brief.taboos ?? [],
             facts: brief.facts,
             language: brief.language,
@@ -208,6 +217,7 @@ export async function rewriteOneDraft(options: {
         brandName: brief.brandName,
         niche: brief.niche,
         toneOfVoice: brief.toneOfVoice,
+        websiteUrl: normalizeWebsiteUrl(brief.websiteUrl ?? ""),
         taboos: brief.taboos ?? [],
       },
       planPost,

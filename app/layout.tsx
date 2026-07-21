@@ -15,9 +15,10 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "AgentMark — ИИ-агент для постов в соцсетях",
+  title: "SMM-Agents — ИИ-агент для постов в соцсетях",
   description:
-    "Опишите бизнес — получите план и тексты для Telegram и VK. Регистрация за минуту.",
+    "Опишите бизнес — получите план и тексты для соцсетей. smm-agents.ru",
+  metadataBase: new URL("https://smm-agents.ru"),
 };
 
 export const viewport = {

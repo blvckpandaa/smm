@@ -41,10 +41,12 @@ export interface BrandBrief {
   audience: AudienceBrief;
   toneOfVoice: string[];
   offer: string;
+  websiteUrl?: string;
   ctaOptions: string[];
   facts: Record<string, string>;
   channels: Channel[];
   postsPerWeek: number;
+  postsPerDay?: number;
   goals?: PostGoal[];
   taboos?: string[];
   startDate: string; // YYYY-MM-DD

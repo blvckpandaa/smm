@@ -5,7 +5,7 @@ function mediaSecret(): string {
   return (
     process.env.AUTH_SECRET?.trim() ||
     process.env.META_APP_SECRET?.trim() ||
-    "agentmark-media"
+    "smm-agents-media"
   );
 }
 

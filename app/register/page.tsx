@@ -52,7 +52,7 @@ export default function RegisterPage() {
     <main className={styles.page}>
       <div className={styles.card}>
         <Link href="/" className={styles.logo}>
-          AgentMark
+          SMM-Agents
         </Link>
         <h1 className={styles.title}>Создать аккаунт</h1>
         <p className={styles.lead}>

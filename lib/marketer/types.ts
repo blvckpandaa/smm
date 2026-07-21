@@ -41,10 +41,14 @@ export interface BrandBrief {
   audience: AudienceBrief;
   toneOfVoice: string[];
   offer: string;
+  /** Сайт или страница проекта — используется в CTA и текстах постов */
+  websiteUrl?: string;
   ctaOptions: string[];
   facts: Record<string, string>;
   channels: Channel[];
   postsPerWeek: number;
+  /** Сколько постов публиковать в один день (1–5). Неделя = postsPerDay × 7 */
+  postsPerDay?: number;
   goals?: PostGoal[];
   taboos?: string[];
   startDate: string; // YYYY-MM-DD

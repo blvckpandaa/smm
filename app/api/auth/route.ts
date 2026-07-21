@@ -5,18 +5,20 @@ import {
   sessionCookieOptions,
 } from "@/lib/auth/session";
 import { getSession } from "@/lib/auth/request";
-import { loginUser, registerUser } from "@/lib/store/projects";
+import { getUserById, loginUser, registerUser } from "@/lib/store/projects";
 
 export async function GET() {
   const session = await getSession();
   if (!session) {
     return Response.json({ user: null });
   }
+  const user = getUserById(session.userId);
   return Response.json({
-    user: {
+    user: user || {
       id: session.userId,
       email: session.email,
       name: session.name,
+      balanceRub: 0,
     },
   });
 }

@@ -14,7 +14,7 @@ export function getAppUrl(): string {
   const raw =
     process.env.APP_URL?.trim() ||
     process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-    "http://localhost:3000";
+    "https://smm-agents.ru";
   return raw.replace(/\/$/, "");
 }
 
@@ -39,7 +39,7 @@ function stateSecret(): string {
   return (
     process.env.AUTH_SECRET?.trim() ||
     getMetaAppSecret() ||
-    "agentmark-meta-state"
+    "smm-agents-meta-state"
   );
 }
 

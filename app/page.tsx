@@ -20,7 +20,7 @@ export default function HomePage() {
       <header className={styles.nav}>
         <div className={`container ${styles.navInner}`}>
           <Link href="/" className={styles.logo}>
-            AgentMark
+            SMM-Agents
           </Link>
           <SiteHeaderActions />
         </div>
@@ -32,7 +32,7 @@ export default function HomePage() {
         <div className={`container ${styles.heroInner}`}>
           <div className={styles.heroBrandBlock}>
             <p className={`eyebrow rise`}>ИИ-агент для соцсетей</p>
-            <h1 className={`${styles.brand} rise rise-delay-1`}>AgentMark</h1>
+            <h1 className={`${styles.brand} rise rise-delay-1`}>SMM-Agents</h1>
           </div>
 
           <div className={styles.heroGrid}>
@@ -158,8 +158,11 @@ export default function HomePage() {
 
       <footer className={styles.footer}>
         <div className={`container ${styles.footerInner}`}>
-          <span className={styles.logo}>AgentMark</span>
-          <p>Посты для соцсетей с помощью ИИ-агента.</p>
+          <span className={styles.logo}>SMM-Agents</span>
+          <p>
+            Посты для соцсетей с помощью ИИ-агента.{" "}
+            <a href="https://smm-agents.ru">smm-agents.ru</a>
+          </p>
         </div>
       </footer>
     </main>

@@ -5,11 +5,44 @@ import type { BrandBrief, Channel, ContentPlan } from "@/lib/marketer/types";
 import type { PostDraft } from "@/lib/smm/types";
 import { hashPassword, verifyPassword } from "@/lib/auth/session";
 
+export type LedgerEntry = {
+  id: string;
+  userId: string;
+  type: "topup" | "charge" | "adjust";
+  amountRub: number;
+  balanceAfter: number;
+  description: string;
+  createdAt: string;
+  yooPaymentId?: string;
+  projectId?: string;
+};
+
 export type User = {
   id: string;
   email: string;
   name: string;
   passwordHash: string;
+  createdAt: string;
+  /** Баланс в рублях */
+  balanceRub: number;
+};
+
+export type PendingTopUp = {
+  id: string;
+  userId: string;
+  amountRub: number;
+  yooPaymentId: string;
+  status: "pending" | "succeeded" | "canceled";
+  createdAt: string;
+};
+
+export type PendingVkAuth = {
+  projectId: string;
+  userId: string;
+  accessToken: string;
+  vkUserId: number;
+  expiresAt?: string;
+  isStub?: boolean;
   createdAt: string;
 };
 
@@ -22,7 +55,11 @@ export type TelegramConnection = {
 export type VkConnection = {
   accessToken: string;
   groupId: string;
+  groupName?: string;
+  vkUserId?: number;
   connectedAt: string;
+  expiresAt?: string;
+  isStub?: boolean;
 };
 
 export type FacebookConnection = {
@@ -94,10 +131,13 @@ export type TrashedProject = Project & {
 };
 
 type StoreFile = {
-  version: 3;
+  version: 4;
   users: User[];
   projects: Project[];
   trash: TrashedProject[];
+  ledger: LedgerEntry[];
+  pendingTopUps: PendingTopUp[];
+  pendingVkAuth?: PendingVkAuth[];
 };
 
 const DATA_DIR = join(process.cwd(), "data");
@@ -117,9 +157,11 @@ function defaultBrief(name = ""): BrandBrief {
     },
     toneOfVoice: [],
     offer: "",
+    websiteUrl: "",
     ctaOptions: ["Написать в комментарии", "Перейти на сайт", "Узнать подробнее"],
     facts: {},
     channels: ["telegram"],
+    postsPerDay: 1,
     postsPerWeek: 7,
     taboos: [],
     startDate: new Date().toISOString().slice(0, 10),
@@ -127,7 +169,15 @@ function defaultBrief(name = ""): BrandBrief {
 }
 
 function emptyStore(): StoreFile {
-  return { version: 3, users: [], projects: [], trash: [] };
+  return {
+    version: 4,
+    users: [],
+    projects: [],
+    trash: [],
+    ledger: [],
+    pendingTopUps: [],
+    pendingVkAuth: [],
+  };
 }
 
 function ensureStore(): StoreFile {
@@ -139,15 +189,29 @@ function ensureStore(): StoreFile {
   }
   try {
     const raw = readFileSync(STORE_PATH, "utf8");
-    const parsed = JSON.parse(raw) as StoreFile & { version?: number; trash?: TrashedProject[] };
+    const parsed = JSON.parse(raw) as StoreFile & {
+      version?: number;
+      trash?: TrashedProject[];
+      ledger?: LedgerEntry[];
+      pendingTopUps?: PendingTopUp[];
+      pendingVkAuth?: PendingVkAuth[];
+    };
     if (!parsed.users) parsed.users = [];
     if (!parsed.projects) parsed.projects = [];
     if (!parsed.trash) parsed.trash = [];
+    if (!parsed.ledger) parsed.ledger = [];
+    if (!parsed.pendingTopUps) parsed.pendingTopUps = [];
+    if (!parsed.pendingVkAuth) parsed.pendingVkAuth = [];
     parsed.projects = parsed.projects.map((p) => ({
       ...p,
       userId: (p as Project).userId || "",
     }));
-    parsed.version = 3;
+    parsed.users = parsed.users.map((u) => ({
+      ...u,
+      balanceRub:
+        typeof (u as User).balanceRub === "number" ? (u as User).balanceRub : 0,
+    }));
+    parsed.version = 4;
     return parsed as StoreFile;
   } catch {
     return emptyStore();
@@ -171,7 +235,7 @@ export function registerUser(input: {
   email: string;
   password: string;
   name: string;
-}): { ok: true; user: Omit<User, "passwordHash"> } | { ok: false; error: string } {
+}): { ok: true; user: PublicUser } | { ok: false; error: string } {
   const email = normalizeEmail(input.email);
   const name = input.name.trim() || "Пользователь";
   const password = input.password;
@@ -194,20 +258,21 @@ export function registerUser(input: {
     name,
     passwordHash: hashPassword(password),
     createdAt: new Date().toISOString(),
+    balanceRub: 0,
   };
   store.users.push(user);
   saveStore(store);
 
   return {
     ok: true,
-    user: { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt },
+    user: toPublicUser(user),
   };
 }
 
 export function loginUser(input: {
   email: string;
   password: string;
-}): { ok: true; user: Omit<User, "passwordHash"> } | { ok: false; error: string } {
+}): { ok: true; user: PublicUser } | { ok: false; error: string } {
   const email = normalizeEmail(input.email);
   const store = ensureStore();
   const user = store.users.find((u) => u.email === email);
@@ -216,14 +281,228 @@ export function loginUser(input: {
   }
   return {
     ok: true,
-    user: { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt },
+    user: toPublicUser(user),
   };
 }
 
-export function getUserById(id: string): Omit<User, "passwordHash"> | null {
+export function getUserById(id: string): PublicUser | null {
   const user = ensureStore().users.find((u) => u.id === id);
   if (!user) return null;
-  return { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt };
+  return toPublicUser(user);
+}
+
+export type PublicUser = {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: string;
+  balanceRub: number;
+};
+
+function toPublicUser(user: User): PublicUser {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    createdAt: user.createdAt,
+    balanceRub: Math.round((user.balanceRub || 0) * 100) / 100,
+  };
+}
+
+export function getUserBalance(userId: string): number {
+  const user = ensureStore().users.find((u) => u.id === userId);
+  return user?.balanceRub ?? 0;
+}
+
+export function listLedgerForUser(userId: string, limit = 20): LedgerEntry[] {
+  return ensureStore()
+    .ledger.filter((e) => e.userId === userId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit);
+}
+
+function creditOrDebit(input: {
+  userId: string;
+  amountRub: number;
+  type: LedgerEntry["type"];
+  description: string;
+  yooPaymentId?: string;
+  projectId?: string;
+}):
+  | { ok: true; balanceRub: number; entry: LedgerEntry }
+  | { ok: false; error: string; balanceRub: number } {
+  const store = ensureStore();
+  const idx = store.users.findIndex((u) => u.id === input.userId);
+  if (idx === -1) {
+    return { ok: false, error: "Пользователь не найден", balanceRub: 0 };
+  }
+  const user = store.users[idx];
+  const next = Math.round((user.balanceRub + input.amountRub) * 100) / 100;
+  if (next < -0.001) {
+    return {
+      ok: false,
+      error: "Недостаточно средств на балансе",
+      balanceRub: user.balanceRub,
+    };
+  }
+  user.balanceRub = Math.max(0, next);
+  const entry: LedgerEntry = {
+    id: randomUUID(),
+    userId: input.userId,
+    type: input.type,
+    amountRub: input.amountRub,
+    balanceAfter: user.balanceRub,
+    description: input.description,
+    createdAt: new Date().toISOString(),
+    yooPaymentId: input.yooPaymentId,
+    projectId: input.projectId,
+  };
+  store.ledger.push(entry);
+  store.users[idx] = user;
+  saveStore(store);
+  return { ok: true, balanceRub: user.balanceRub, entry };
+}
+
+/** Пополнение баланса (после успешной оплаты ЮKassa или демо). */
+export function creditUserBalance(input: {
+  userId: string;
+  amountRub: number;
+  description: string;
+  yooPaymentId?: string;
+}):
+  | { ok: true; balanceRub: number; entry: LedgerEntry }
+  | { ok: false; error: string; balanceRub: number } {
+  if (input.amountRub <= 0) {
+    return {
+      ok: false,
+      error: "Сумма пополнения должна быть больше 0",
+      balanceRub: getUserBalance(input.userId),
+    };
+  }
+  if (input.yooPaymentId) {
+    const store = ensureStore();
+    const already = store.ledger.find(
+      (e) => e.yooPaymentId === input.yooPaymentId && e.type === "topup"
+    );
+    if (already) {
+      return {
+        ok: true,
+        balanceRub: getUserBalance(input.userId),
+        entry: already,
+      };
+    }
+  }
+  return creditOrDebit({
+    userId: input.userId,
+    amountRub: input.amountRub,
+    type: "topup",
+    description: input.description,
+    yooPaymentId: input.yooPaymentId,
+  });
+}
+
+/** Списание за работу маркетолога (N постов). */
+export function chargeUserForPosts(input: {
+  userId: string;
+  postsCount: number;
+  pricePerPost: number;
+  projectId?: string;
+  description?: string;
+}):
+  | { ok: true; balanceRub: number; chargedRub: number; entry: LedgerEntry }
+  | { ok: false; error: string; balanceRub: number; needRub: number } {
+  const chargedRub =
+    Math.max(0, Math.floor(input.postsCount)) * input.pricePerPost;
+  const balance = getUserBalance(input.userId);
+  if (chargedRub <= 0) {
+    return {
+      ok: true,
+      balanceRub: balance,
+      chargedRub: 0,
+      entry: {
+        id: "noop",
+        userId: input.userId,
+        type: "charge",
+        amountRub: 0,
+        balanceAfter: balance,
+        description: "Без списания",
+        createdAt: new Date().toISOString(),
+      },
+    };
+  }
+  if (balance + 0.001 < chargedRub) {
+    return {
+      ok: false,
+      error: `Недостаточно средств: нужно ${chargedRub} ₽, на балансе ${balance} ₽`,
+      balanceRub: balance,
+      needRub: chargedRub,
+    };
+  }
+  const result = creditOrDebit({
+    userId: input.userId,
+    amountRub: -chargedRub,
+    type: "charge",
+    description:
+      input.description ||
+      `Маркетолог: ${input.postsCount} постов × ${input.pricePerPost} ₽`,
+    projectId: input.projectId,
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: result.error,
+      balanceRub: result.balanceRub,
+      needRub: chargedRub,
+    };
+  }
+  return {
+    ok: true,
+    balanceRub: result.balanceRub,
+    chargedRub,
+    entry: result.entry,
+  };
+}
+
+export function savePendingTopUp(input: {
+  userId: string;
+  amountRub: number;
+  yooPaymentId: string;
+}): PendingTopUp {
+  const store = ensureStore();
+  const row: PendingTopUp = {
+    id: randomUUID(),
+    userId: input.userId,
+    amountRub: input.amountRub,
+    yooPaymentId: input.yooPaymentId,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  };
+  store.pendingTopUps.push(row);
+  saveStore(store);
+  return row;
+}
+
+export function markTopUpSucceeded(yooPaymentId: string): PendingTopUp | null {
+  const store = ensureStore();
+  const idx = store.pendingTopUps.findIndex(
+    (p) => p.yooPaymentId === yooPaymentId
+  );
+  if (idx === -1) return null;
+  store.pendingTopUps[idx] = {
+    ...store.pendingTopUps[idx],
+    status: "succeeded",
+  };
+  saveStore(store);
+  return store.pendingTopUps[idx];
+}
+
+export function findPendingTopUp(
+  yooPaymentId: string
+): PendingTopUp | null {
+  return (
+    ensureStore().pendingTopUps.find((p) => p.yooPaymentId === yooPaymentId) ??
+    null
+  );
 }
 
 export function listProjectsForUser(userId: string): Project[] {
@@ -413,7 +692,14 @@ export function setTelegramChannel(
 export function setVkChannel(
   projectId: string,
   userId: string,
-  data: { accessToken: string; groupId: string }
+  data: {
+    accessToken: string;
+    groupId: string;
+    groupName?: string;
+    vkUserId?: number;
+    expiresAt?: string;
+    isStub?: boolean;
+  }
 ): Project | null {
   const project = getProjectForUser(projectId, userId);
   if (!project) return null;
@@ -423,10 +709,54 @@ export function setVkChannel(
       vk: {
         accessToken: data.accessToken.trim(),
         groupId: data.groupId.trim(),
+        groupName: data.groupName?.trim(),
+        vkUserId: data.vkUserId,
+        expiresAt: data.expiresAt,
+        isStub: data.isStub,
         connectedAt: new Date().toISOString(),
       },
     },
   });
+}
+
+export function savePendingVkAuth(
+  data: Omit<PendingVkAuth, "createdAt">
+): PendingVkAuth {
+  const store = ensureStore();
+  const entry: PendingVkAuth = {
+    ...data,
+    createdAt: new Date().toISOString(),
+  };
+  store.pendingVkAuth = [
+    ...(store.pendingVkAuth ?? []).filter(
+      (p) => !(p.projectId === data.projectId && p.userId === data.userId)
+    ),
+    entry,
+  ];
+  saveStore(store);
+  return entry;
+}
+
+export function getPendingVkAuth(
+  projectId: string,
+  userId: string
+): PendingVkAuth | null {
+  const store = ensureStore();
+  const entry = (store.pendingVkAuth ?? []).find(
+    (p) => p.projectId === projectId && p.userId === userId
+  );
+  if (!entry) return null;
+  const ageMs = Date.now() - new Date(entry.createdAt).getTime();
+  if (ageMs > 30 * 60_000) return null;
+  return entry;
+}
+
+export function clearPendingVkAuth(projectId: string, userId: string): void {
+  const store = ensureStore();
+  store.pendingVkAuth = (store.pendingVkAuth ?? []).filter(
+    (p) => !(p.projectId === projectId && p.userId === userId)
+  );
+  saveStore(store);
 }
 
 export function setFacebookChannel(
@@ -563,7 +893,9 @@ export function toPublicProject(project: Project) {
         ? {
             connected: true,
             groupId: project.channels.vk.groupId,
+            groupName: project.channels.vk.groupName,
             connectedAt: project.channels.vk.connectedAt,
+            isStub: Boolean(project.channels.vk.isStub),
             accessTokenMasked: maskSecret(project.channels.vk.accessToken),
           }
         : { connected: false },

@@ -62,19 +62,19 @@ function sanitizeTopic(raw: Partial<TopicIdea>, index: number): TopicIdea {
   };
 }
 
-const SYSTEM_PROMPT = `Ты агент-маркетолог SMM-платформы AgentMark.
+const SYSTEM_PROMPT = `Ты агент-маркетолог SMM-платформы SMM-Agents.
 Твоя задача — предложить темы постов на неделю для ЛЮБОЙ ниши бизнеса или эксперта.
 
 Правила:
 - Отвечай ТОЛЬКО валидным JSON без пояснений
 - Не выдумывай цены, акции, цифры — если нет фактов, пиши [уточнить]
 - Микс: мало чистых офферов (~15%), больше пользы, доверия, вовлечения
-- Хуки короткие, без воды, на языке бренда
+- Хуки короткие, без воды, на языке из брифа (поле language: ru/en/…)
 - Учитывай Tone of Voice и табу из брифа
 - Темы должны быть интересны живым людям, не шаблонный спам
 - САМ решай, нужен ли визуал: text_image/carousel — если пост выиграет от фото; text/poll — если достаточно текста; short_video — только если идея явно про видео
 - Если канал Instagram — почти всегда format text_image (фото обязательно)
-- Если канал Threads — всегда format text (без фото)
+- Если в брифе есть websiteUrl — темы с призывом перейти должны опираться на эту ссылку
 
 Формат ответа:
 {
@@ -92,7 +92,7 @@ const SYSTEM_PROMPT = `Ты агент-маркетолог SMM-платформ
   ]
 }
 
-Количество topics должно быть ровно равно числу постов в брифе (postsPerWeek).`;
+Количество topics должно быть ровно равно postsPerWeek из брифа (это postsPerDay × 7).`;
 
 export async function generateTopicsWithDeepSeek(
   brief: BrandBrief
@@ -107,9 +107,11 @@ export async function generateTopicsWithDeepSeek(
     audience: brief.audience,
     toneOfVoice: brief.toneOfVoice,
     offer: brief.offer,
+    websiteUrl: brief.websiteUrl?.trim() || undefined,
     ctaOptions: brief.ctaOptions,
     facts: brief.facts,
     channels: brief.channels,
+    postsPerDay: brief.postsPerDay ?? Math.max(1, Math.round((brief.postsPerWeek || 7) / 7)),
     postsPerWeek: brief.postsPerWeek,
     taboos: brief.taboos ?? [],
     goals: brief.goals ?? [],
