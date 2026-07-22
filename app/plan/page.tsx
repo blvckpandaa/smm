@@ -2507,19 +2507,21 @@ export default function PlanPage() {
               aria-modal="true"
               aria-labelledby="billing-title"
             >
-              <div className={styles.modalCard}>
+              <div className={`${styles.modalCard} ${styles.billingCard}`}>
                 <h2 id="billing-title">
                   {uiLang === "en" ? "Payment profile" : "Профиль оплаты"}
                 </h2>
-                <p>
-                  {uiLang === "en" ? "Balance" : "Баланс"}:{" "}
+                <div className={styles.billingBalance}>
+                  <span>
+                    {uiLang === "en" ? "Current balance" : "Текущий баланс"}
+                  </span>
                   <strong>
                     {balanceRub.toLocaleString(
                       uiLang === "en" ? "en-US" : "ru-RU"
                     )}{" "}
                     ₽
                   </strong>
-                </p>
+                </div>
                 <p className={styles.modalHint}>
                   {uiLang === "en"
                     ? `${postPriceRub} ₽ per post — charged before the marketer builds the weekly plan.`
@@ -2532,35 +2534,56 @@ export default function PlanPage() {
                       : "ЮKassa не настроена — пополнение идёт в демо-баланс."}
                   </p>
                 )}
-                <p className={styles.bizLabel}>
-                  {uiLang === "en" ? "Top up" : "Пополнить"}
-                </p>
-                <div className={styles.topupGrid}>
-                  {topupPresets.map((amount) => (
-                    <button
-                      key={amount}
-                      type="button"
-                      className={
-                        topupAmount === amount ? styles.typeOn : styles.typeChip
-                      }
-                      onClick={() => setTopupAmount(amount)}
-                    >
-                      {amount} ₽
-                    </button>
-                  ))}
+                <div className={styles.billingSection}>
+                  <p className={styles.bizLabel}>
+                    {uiLang === "en" ? "Top up" : "Пополнить"}
+                  </p>
+                  <div className={styles.topupGrid}>
+                    {topupPresets.map((amount) => (
+                      <button
+                        key={amount}
+                        type="button"
+                        className={
+                          topupAmount === amount
+                            ? styles.typeOn
+                            : styles.typeChip
+                        }
+                        onClick={() => setTopupAmount(amount)}
+                      >
+                        {amount.toLocaleString(
+                          uiLang === "en" ? "en-US" : "ru-RU"
+                        )}{" "}
+                        ₽
+                      </button>
+                    ))}
+                  </div>
+                  <label className={styles.topupCustom}>
+                    <span>
+                      {uiLang === "en" ? "Custom amount" : "Своя сумма"}
+                    </span>
+                    <span className={styles.topupInputWrap}>
+                      <input
+                        type="number"
+                        min={50}
+                        max={100000}
+                        step={50}
+                        inputMode="numeric"
+                        value={topupAmount}
+                        onChange={(e) =>
+                          setTopupAmount(Number(e.target.value) || 50)
+                        }
+                      />
+                      <span className={styles.topupCurrency} aria-hidden>
+                        ₽
+                      </span>
+                    </span>
+                    <span className={styles.fieldHint}>
+                      {uiLang === "en"
+                        ? "Minimum 50 ₽"
+                        : "Минимум 50 ₽"}
+                    </span>
+                  </label>
                 </div>
-                <label>
-                  {uiLang === "en" ? "Custom amount" : "Своя сумма"}
-                  <input
-                    type="number"
-                    min={50}
-                    max={100000}
-                    value={topupAmount}
-                    onChange={(e) =>
-                      setTopupAmount(Number(e.target.value) || 50)
-                    }
-                  />
-                </label>
                 {ledger.length > 0 && (
                   <div className={styles.ledgerBox}>
                     <p className={styles.bizLabel}>
@@ -2600,8 +2623,8 @@ export default function PlanPage() {
                         ? "Processing…"
                         : "Оформляем…"
                       : uiLang === "en"
-                        ? `Pay ${topupAmount} ₽`
-                        : `Оплатить ${topupAmount} ₽`}
+                        ? `Pay ${topupAmount.toLocaleString("en-US")} ₽`
+                        : `Оплатить ${topupAmount.toLocaleString("ru-RU")} ₽`}
                   </button>
                 </div>
               </div>

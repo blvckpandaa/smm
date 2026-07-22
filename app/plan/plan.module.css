@@ -98,15 +98,95 @@
   color: var(--ink);
 }
 
+.billingCard {
+  width: min(100%, 440px);
+}
+
+.billingBalance {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1.5px solid var(--ink);
+  background: color-mix(in srgb, var(--lime) 40%, white);
+}
+
+.billingBalance span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.billingBalance strong {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.billingSection {
+  display: grid;
+  gap: 0.65rem;
+}
+
 .topupGrid {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
-  margin-bottom: 0.85rem;
+}
+
+.topupCustom {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+
+.topupInputWrap {
+  position: relative;
+  display: block;
+}
+
+.topupInputWrap input {
+  width: 100%;
+  min-height: 48px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: 0.65rem 2.5rem 0.65rem 0.85rem;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 700;
+  appearance: textfield;
+}
+
+.topupInputWrap input::-webkit-outer-spin-button,
+.topupInputWrap input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.topupInputWrap input:focus {
+  outline: 2px solid var(--lime);
+  border-color: var(--ink);
+}
+
+.topupCurrency {
+  position: absolute;
+  right: 0.9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: 800;
+  color: var(--muted);
+  pointer-events: none;
 }
 
 .ledgerBox {
-  margin: 0.75rem 0 1rem;
+  margin: 0.15rem 0 0;
   max-height: 160px;
   overflow: auto;
 }
