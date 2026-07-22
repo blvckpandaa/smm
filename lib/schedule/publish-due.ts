@@ -102,7 +102,7 @@ export async function publishDueDrafts(projectId?: string): Promise<{
           ...draft,
           status: "published",
           publishedExternalId: result.postId,
-          publishError: undefined,
+          publishError: result.warning,
         });
         published += 1;
         changed = true;

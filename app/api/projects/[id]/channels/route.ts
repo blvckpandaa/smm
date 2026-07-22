@@ -7,6 +7,7 @@ import {
   setVkChannel,
   toPublicProject,
 } from "@/lib/store/projects";
+import { verifyVkPublishToken } from "@/lib/vk/oauth";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -28,6 +29,7 @@ export async function PUT(req: Request, ctx: Ctx) {
       chatId?: string;
       accessToken?: string;
       groupId?: string;
+      groupName?: string;
     };
 
     if (
@@ -60,13 +62,25 @@ export async function PUT(req: Request, ctx: Ctx) {
     if (body.channel === "vk") {
       if (!body.accessToken?.trim() || !body.groupId?.trim()) {
         return Response.json(
-          { error: "Нужны токен и ID группы VK" },
+          { error: "Нужны токен и ссылка/ID сообщества VK" },
           { status: 400 }
         );
       }
-      const updated = setVkChannel(id, userId, {
+      const verified = await verifyVkPublishToken({
         accessToken: body.accessToken,
         groupId: body.groupId,
+      });
+      if (!verified.ok) {
+        return Response.json({ error: verified.error }, { status: 400 });
+      }
+      const updated = setVkChannel(id, userId, {
+        accessToken: body.accessToken,
+        groupId: String(verified.group.id),
+        groupName: body.groupName?.trim() || verified.group.name,
+        vkUserId: verified.vkUserId,
+        // Личный токен — и для постов, и для фото
+        userAccessToken:
+          verified.mode === "user" ? body.accessToken.trim() : undefined,
       });
       return Response.json({ project: toPublicProject(updated!) });
     }

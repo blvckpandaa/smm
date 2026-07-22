@@ -1,13 +1,18 @@
 import { requireSession } from "@/lib/auth/request";
 import { getAppUrl } from "@/lib/meta/config";
-import { getProjectForUser, savePendingVkAuth } from "@/lib/store/projects";
 import {
-  buildVkAuthUrl,
-  signVkState,
+  getProjectForUser,
+  savePendingVkAuth,
+  savePendingVkUserFlow,
+} from "@/lib/store/projects";
+import {
+  buildVkLegacyUserAuthUrl,
+  getVkOAuthAppId,
+  hasDedicatedVkOAuthApp,
   useVkStub,
 } from "@/lib/vk/config";
 
-/** Старт OAuth VK: ?projectId= */
+/** Автоподключение VK: oauth.vk.com → выбор сообщества → токен сообщества. */
 export async function GET(req: Request) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
@@ -40,10 +45,33 @@ export async function GET(req: Request) {
     );
   }
 
-  const state = signVkState({
+  if (!getVkOAuthAppId()) {
+    return Response.redirect(
+      `${getAppUrl()}/plan?vk_error=${encodeURIComponent(
+        "VK не настроен на сервере"
+      )}`
+    );
+  }
+
+  const groupId = url.searchParams.get("groupId")?.trim()?.replace(/^-/, "");
+  if (groupId) {
+    return Response.redirect(
+      `${getAppUrl()}/api/vk/start-community?projectId=${encodeURIComponent(projectId)}&groupId=${encodeURIComponent(groupId)}`
+    );
+  }
+
+  if (!hasDedicatedVkOAuthApp()) {
+    return Response.redirect(
+      `${getAppUrl()}/plan?step=channels&vk_error=${encodeURIComponent(
+        "Укажите ссылку или ID сообщества VK в поле ниже"
+      )}`
+    );
+  }
+
+  const flow = savePendingVkUserFlow({
     projectId,
     userId: auth.session.userId,
   });
 
-  return Response.redirect(buildVkAuthUrl(state));
+  return Response.redirect(buildVkLegacyUserAuthUrl({ state: flow.state }));
 }

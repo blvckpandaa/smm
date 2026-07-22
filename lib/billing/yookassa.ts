@@ -32,13 +32,49 @@ function authHeader(): string {
   return `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`;
 }
 
+function getVatCode(): number {
+  const raw = process.env.YOOKASSA_VAT_CODE?.trim();
+  const n = raw ? Number(raw) : 1;
+  return Number.isFinite(n) && n >= 1 && n <= 12 ? n : 1;
+}
+
+function getTaxSystemCode(): number | undefined {
+  const raw = process.env.YOOKASSA_TAX_SYSTEM_CODE?.trim();
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1 && n <= 6 ? n : undefined;
+}
+
 export async function createYooPayment(input: {
   amountRub: number;
   description: string;
   returnUrl: string;
   metadata: Record<string, string>;
+  /** Email покупателя для фискального чека (54-ФЗ) */
+  customerEmail: string;
 }): Promise<YooPayment> {
   const value = input.amountRub.toFixed(2);
+  const email = input.customerEmail.trim().toLowerCase();
+  if (!email.includes("@")) {
+    throw new Error("Для оплаты нужен корректный email в профиле");
+  }
+
+  const receipt: Record<string, unknown> = {
+    customer: { email },
+    items: [
+      {
+        description: input.description.slice(0, 128),
+        quantity: "1.00",
+        amount: { value, currency: "RUB" },
+        vat_code: getVatCode(),
+        payment_mode: "full_payment",
+        payment_subject: "service",
+      },
+    ],
+  };
+  const taxSystem = getTaxSystemCode();
+  if (taxSystem != null) receipt.tax_system_code = taxSystem;
+
   const res = await fetch("https://api.yookassa.ru/v3/payments", {
     method: "POST",
     headers: {
@@ -55,6 +91,7 @@ export async function createYooPayment(input: {
       },
       description: input.description.slice(0, 128),
       metadata: input.metadata,
+      receipt,
     }),
   });
 

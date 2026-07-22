@@ -46,6 +46,7 @@ export async function GET(req: Request) {
           error:
             "Нет сообществ, где вы администратор. Создайте группу в VK или получите права администратора.",
           groups: [],
+          needsCommunityToken: true,
         },
         { status: 404 }
       );
@@ -54,6 +55,18 @@ export async function GET(req: Request) {
     return Response.json({ groups, stub: false });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Ошибка VK API";
-    return Response.json({ error: message }, { status: 500 });
+    const needsCommunityToken =
+      /profile type|unavailable|Method is not available|недоступ/i.test(
+        message
+      );
+    return Response.json(
+      {
+        error: needsCommunityToken
+          ? "Вход через VK ID прошёл, но список сообществ через него недоступен. Подключите сообщество по ключу API (поле ниже): Управление → Дополнительно → Работа с API."
+          : message,
+        needsCommunityToken,
+      },
+      { status: needsCommunityToken ? 422 : 500 }
+    );
   }
 }

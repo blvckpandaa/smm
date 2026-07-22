@@ -6,10 +6,10 @@ import {
   setVkChannel,
   toPublicProject,
 } from "@/lib/store/projects";
-import { VK_STUB_GROUPS } from "@/lib/vk/config";
-import { listVkAdminGroups } from "@/lib/vk/oauth";
+import { useVkStub, VK_STUB_GROUPS } from "@/lib/vk/config";
+import { verifyVkPublishToken } from "@/lib/vk/oauth";
 
-/** Выбор сообщества и финальное подключение VK */
+/** Выбор сообщества после входа: сохранить личный токен + проверить wall.post. */
 export async function POST(req: Request) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
@@ -36,44 +36,55 @@ export async function POST(req: Request) {
     const pending = getPendingVkAuth(projectId, auth.session.userId);
     if (!pending) {
       return Response.json(
-        { error: "Сессия VK истекла — подключите VK заново" },
+        { error: "Сессия VK истекла — нажмите «Подключить VK» снова" },
         { status: 401 }
       );
     }
 
-    let groupName: string | undefined;
-    if (pending.isStub) {
+    if (pending.isStub || useVkStub()) {
       const stub = VK_STUB_GROUPS.find((g) => String(g.id) === groupId);
       if (!stub) {
         return Response.json({ error: "Сообщество не найдено" }, { status: 404 });
       }
-      groupName = stub.name;
-    } else {
-      const groups = await listVkAdminGroups(pending.accessToken);
-      const found = groups.find((g) => String(g.id) === groupId);
-      if (!found) {
-        return Response.json(
-          { error: "Нет доступа к этому сообществу" },
-          { status: 403 }
-        );
-      }
-      groupName = found.name;
+      const updated = setVkChannel(projectId, auth.session.userId, {
+        accessToken: pending.accessToken,
+        groupId,
+        groupName: stub.name,
+        vkUserId: pending.vkUserId,
+        expiresAt: pending.expiresAt,
+        isStub: true,
+      });
+      clearPendingVkAuth(projectId, auth.session.userId);
+      return Response.json({
+        ok: true,
+        project: toPublicProject(updated!),
+        stub: true,
+      });
+    }
+
+    const verified = await verifyVkPublishToken({
+      accessToken: pending.accessToken,
+      groupId,
+    });
+    if (!verified.ok) {
+      return Response.json({ error: verified.error }, { status: 400 });
     }
 
     const updated = setVkChannel(projectId, auth.session.userId, {
       accessToken: pending.accessToken,
-      groupId,
-      groupName,
-      vkUserId: pending.vkUserId,
+      groupId: String(verified.group.id),
+      groupName: verified.group.name,
+      vkUserId: verified.vkUserId ?? pending.vkUserId,
+      userAccessToken:
+        verified.mode === "user" ? pending.accessToken : undefined,
       expiresAt: pending.expiresAt,
-      isStub: pending.isStub,
     });
 
     clearPendingVkAuth(projectId, auth.session.userId);
 
     return Response.json({
+      ok: true,
       project: toPublicProject(updated!),
-      stub: Boolean(pending.isStub),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Ошибка подключения VK";

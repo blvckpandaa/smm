@@ -66,7 +66,11 @@ export async function generateImageBytes(prompt: string): Promise<Buffer> {
   const key = process.env.POLLINATIONS_API_KEY?.trim();
   if (key) headers.Authorization = `Bearer ${key}`;
 
-  const res = await fetch(url, { headers, redirect: "follow" });
+  const res = await fetch(url, {
+    headers,
+    redirect: "follow",
+    signal: AbortSignal.timeout(120_000),
+  });
   if (!res.ok) {
     const err = await res.text().catch(() => "");
     throw new Error(

@@ -46,6 +46,26 @@ export type PendingVkAuth = {
   createdAt: string;
 };
 
+/** PKCE-сессия VK ID (state без точек — VK может их убрать из URL). */
+export type PendingVkOAuthFlow = {
+  state: string;
+  projectId: string;
+  userId: string;
+  codeVerifier: string;
+  /** connect — выбор сообщества; photo — личный токен для загрузки фото */
+  purpose?: "connect" | "photo";
+  createdAt: string;
+};
+
+/** Выдача токена сообщества через oauth.vk.com (implicit). */
+export type PendingVkCommunityFlow = {
+  state: string;
+  projectId: string;
+  userId: string;
+  groupId: string;
+  createdAt: string;
+};
+
 export type TelegramConnection = {
   botToken: string;
   chatId: string;
@@ -57,6 +77,8 @@ export type VkConnection = {
   groupId: string;
   groupName?: string;
   vkUserId?: number;
+  /** Личный токен администратора — для загрузки фото на стену */
+  userAccessToken?: string;
   connectedAt: string;
   expiresAt?: string;
   isStub?: boolean;
@@ -112,6 +134,34 @@ export type ProjectChannels = {
   x?: XConnection;
 };
 
+/** Фоновая генерация плана — переживает обновление страницы */
+export type PlanJob = {
+  status: "running" | "failed";
+  startedAt: string;
+  error?: string;
+  chargedRub?: number;
+  postsCount?: number;
+  balanceRub?: number;
+};
+
+/** Фоновая генерация текстов постов — переживает обновление страницы */
+export type DraftsJob = {
+  status: "running" | "failed";
+  startedAt: string;
+  phase?: "texts" | "photos";
+  photoDone?: number;
+  photoTotal?: number;
+  error?: string;
+};
+
+/** Выдача личного токена VK (oauth.vk.com) для загрузки фото. */
+export type PendingVkUserFlow = {
+  state: string;
+  projectId: string;
+  userId: string;
+  createdAt: string;
+};
+
 export type Project = {
   id: string;
   userId: string;
@@ -122,8 +172,10 @@ export type Project = {
   channels: ProjectChannels;
   plan: ContentPlan | null;
   planSource: "deepseek" | "local" | null;
+  planJob?: PlanJob | null;
   drafts: PostDraft[];
   draftsSource: "deepseek" | "local" | null;
+  draftsJob?: DraftsJob | null;
 };
 
 export type TrashedProject = Project & {
@@ -138,6 +190,9 @@ type StoreFile = {
   ledger: LedgerEntry[];
   pendingTopUps: PendingTopUp[];
   pendingVkAuth?: PendingVkAuth[];
+  pendingVkOAuth?: PendingVkOAuthFlow[];
+  pendingVkCommunity?: PendingVkCommunityFlow[];
+  pendingVkUser?: PendingVkUserFlow[];
 };
 
 const DATA_DIR = join(process.cwd(), "data");
@@ -177,6 +232,9 @@ function emptyStore(): StoreFile {
     ledger: [],
     pendingTopUps: [],
     pendingVkAuth: [],
+    pendingVkOAuth: [],
+    pendingVkCommunity: [],
+    pendingVkUser: [],
   };
 }
 
@@ -195,6 +253,9 @@ function ensureStore(): StoreFile {
       ledger?: LedgerEntry[];
       pendingTopUps?: PendingTopUp[];
       pendingVkAuth?: PendingVkAuth[];
+      pendingVkOAuth?: PendingVkOAuthFlow[];
+      pendingVkCommunity?: PendingVkCommunityFlow[];
+      pendingVkUser?: PendingVkUserFlow[];
     };
     if (!parsed.users) parsed.users = [];
     if (!parsed.projects) parsed.projects = [];
@@ -202,6 +263,9 @@ function ensureStore(): StoreFile {
     if (!parsed.ledger) parsed.ledger = [];
     if (!parsed.pendingTopUps) parsed.pendingTopUps = [];
     if (!parsed.pendingVkAuth) parsed.pendingVkAuth = [];
+    if (!parsed.pendingVkOAuth) parsed.pendingVkOAuth = [];
+    if (!parsed.pendingVkCommunity) parsed.pendingVkCommunity = [];
+    if (!parsed.pendingVkUser) parsed.pendingVkUser = [];
     parsed.projects = parsed.projects.map((p) => ({
       ...p,
       userId: (p as Project).userId || "",
@@ -544,8 +608,10 @@ export function createProject(
     channels: {},
     plan: null,
     planSource: null,
+    planJob: null,
     drafts: [],
     draftsSource: null,
+    draftsJob: null,
   };
 
   store.projects.push(project);
@@ -564,8 +630,10 @@ export function updateProject(
       | "channels"
       | "plan"
       | "planSource"
+      | "planJob"
       | "drafts"
       | "draftsSource"
+      | "draftsJob"
     >
   >,
   options?: { replaceChannels?: boolean }
@@ -586,6 +654,14 @@ export function updateProject(
     ...patch,
     brief: patch.brief ? { ...current.brief, ...patch.brief } : current.brief,
     channels,
+    planJob:
+      patch.planJob === undefined
+        ? current.planJob
+        : patch.planJob,
+    draftsJob:
+      patch.draftsJob === undefined
+        ? current.draftsJob
+        : patch.draftsJob,
   });
 
   store.projects[idx] = next;
@@ -697,12 +773,14 @@ export function setVkChannel(
     groupId: string;
     groupName?: string;
     vkUserId?: number;
+    userAccessToken?: string;
     expiresAt?: string;
     isStub?: boolean;
   }
 ): Project | null {
   const project = getProjectForUser(projectId, userId);
   if (!project) return null;
+  const prev = project.channels.vk;
   return updateProject(projectId, userId, {
     channels: {
       ...project.channels,
@@ -711,12 +789,168 @@ export function setVkChannel(
         groupId: data.groupId.trim(),
         groupName: data.groupName?.trim(),
         vkUserId: data.vkUserId,
+        userAccessToken:
+          data.userAccessToken?.trim() || prev?.userAccessToken,
         expiresAt: data.expiresAt,
         isStub: data.isStub,
-        connectedAt: new Date().toISOString(),
+        connectedAt: prev?.connectedAt || new Date().toISOString(),
       },
     },
   });
+}
+
+export function setVkUserAccessToken(
+  projectId: string,
+  userId: string,
+  userAccessToken: string
+): Project | null {
+  const project = getProjectForUser(projectId, userId);
+  if (!project?.channels.vk) return null;
+  return updateProject(projectId, userId, {
+    channels: {
+      ...project.channels,
+      vk: {
+        ...project.channels.vk,
+        userAccessToken: userAccessToken.trim(),
+      },
+    },
+  });
+}
+
+export function savePendingVkOAuthFlow(input: {
+  projectId: string;
+  userId: string;
+  codeVerifier: string;
+  purpose?: "connect" | "photo";
+}): PendingVkOAuthFlow {
+  const store = ensureStore();
+  const state = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+  const purpose = input.purpose ?? "connect";
+  const entry: PendingVkOAuthFlow = {
+    state,
+    projectId: input.projectId,
+    userId: input.userId,
+    codeVerifier: input.codeVerifier,
+    purpose,
+    createdAt: new Date().toISOString(),
+  };
+  store.pendingVkOAuth = [
+    ...(store.pendingVkOAuth ?? []).filter(
+      (p) =>
+        !(
+          p.projectId === input.projectId &&
+          p.userId === input.userId &&
+          (p.purpose ?? "connect") === purpose
+        )
+    ),
+    entry,
+  ];
+  saveStore(store);
+  return entry;
+}
+
+export function getPendingVkOAuthFlow(state: string): PendingVkOAuthFlow | null {
+  const store = ensureStore();
+  const entry = (store.pendingVkOAuth ?? []).find((p) => p.state === state);
+  if (!entry) return null;
+  const ageMs = Date.now() - new Date(entry.createdAt).getTime();
+  if (ageMs > 15 * 60_000) return null;
+  return entry;
+}
+
+export function clearPendingVkOAuthFlow(state: string): void {
+  const store = ensureStore();
+  store.pendingVkOAuth = (store.pendingVkOAuth ?? []).filter(
+    (p) => p.state !== state
+  );
+  saveStore(store);
+}
+
+export function savePendingVkCommunityFlow(input: {
+  projectId: string;
+  userId: string;
+  groupId: string;
+}): PendingVkCommunityFlow {
+  const store = ensureStore();
+  const state = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+  const entry: PendingVkCommunityFlow = {
+    state,
+    projectId: input.projectId,
+    userId: input.userId,
+    groupId: input.groupId.replace(/^-/, "").trim(),
+    createdAt: new Date().toISOString(),
+  };
+  store.pendingVkCommunity = [
+    ...(store.pendingVkCommunity ?? []).filter(
+      (p) => !(p.projectId === input.projectId && p.userId === input.userId)
+    ),
+    entry,
+  ];
+  saveStore(store);
+  return entry;
+}
+
+export function getPendingVkCommunityFlow(
+  state: string
+): PendingVkCommunityFlow | null {
+  const store = ensureStore();
+  const entry = (store.pendingVkCommunity ?? []).find((p) => p.state === state);
+  if (!entry) return null;
+  const ageMs = Date.now() - new Date(entry.createdAt).getTime();
+  if (ageMs > 15 * 60_000) return null;
+  return entry;
+}
+
+export function clearPendingVkCommunityFlow(state: string): void {
+  const store = ensureStore();
+  store.pendingVkCommunity = (store.pendingVkCommunity ?? []).filter(
+    (p) => p.state !== state
+  );
+  saveStore(store);
+}
+
+export function savePendingVkUserFlow(input: {
+  projectId: string;
+  userId: string;
+}): PendingVkUserFlow {
+  const store = ensureStore();
+  const state = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+  const entry: PendingVkUserFlow = {
+    state,
+    projectId: input.projectId,
+    userId: input.userId,
+    createdAt: new Date().toISOString(),
+  };
+  store.pendingVkUser = [
+    ...(store.pendingVkUser ?? []).filter(
+      (p) =>
+        !(
+          p.projectId === input.projectId && p.userId === input.userId
+        )
+    ),
+    entry,
+  ];
+  saveStore(store);
+  return entry;
+}
+
+export function getPendingVkUserFlow(
+  state: string
+): PendingVkUserFlow | null {
+  const store = ensureStore();
+  const entry = (store.pendingVkUser ?? []).find((p) => p.state === state);
+  if (!entry) return null;
+  const ageMs = Date.now() - new Date(entry.createdAt).getTime();
+  if (ageMs > 15 * 60_000) return null;
+  return entry;
+}
+
+export function clearPendingVkUserFlow(state: string): void {
+  const store = ensureStore();
+  store.pendingVkUser = (store.pendingVkUser ?? []).filter(
+    (p) => p.state !== state
+  );
+  saveStore(store);
 }
 
 export function savePendingVkAuth(
@@ -878,8 +1112,10 @@ export function toPublicProject(project: Project) {
     brief: project.brief,
     plan: project.plan,
     planSource: project.planSource,
+    planJob: project.planJob ?? null,
     drafts: project.drafts,
     draftsSource: project.draftsSource,
+    draftsJob: project.draftsJob ?? null,
     channels: {
       telegram: project.channels.telegram
         ? {
@@ -897,6 +1133,7 @@ export function toPublicProject(project: Project) {
             connectedAt: project.channels.vk.connectedAt,
             isStub: Boolean(project.channels.vk.isStub),
             accessTokenMasked: maskSecret(project.channels.vk.accessToken),
+            hasUserPhotoToken: Boolean(project.channels.vk.userAccessToken),
           }
         : { connected: false },
       facebook: project.channels.facebook

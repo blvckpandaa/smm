@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BrandBrief, Channel, ContentPlan, PostGoal } from "@/lib/marketer";
 import type { PostDraft } from "@/lib/smm/types";
 import {
@@ -19,6 +19,7 @@ import {
   UI_LANG_KEY,
 } from "@/lib/i18n/ui";
 import { isValidWebsiteUrl, normalizeWebsiteUrl } from "@/lib/marketer/website";
+import { parseVkAccessToken, parseVkGroupId } from "@/lib/vk/parse-group-id";
 import styles from "./plan.module.css";
 
 const CHANNELS: { id: Channel; label: string }[] = [
@@ -65,6 +66,7 @@ type PublicChannels = {
     groupName?: string;
     isStub?: boolean;
     accessTokenMasked?: string;
+    hasUserPhotoToken?: boolean;
   };
   facebook: {
     connected: boolean;
@@ -93,8 +95,24 @@ type PublicProject = {
   brief: BrandBrief;
   plan: ContentPlan | null;
   planSource: "deepseek" | "local" | null;
+  planJob?: {
+    status: "running" | "failed";
+    startedAt: string;
+    error?: string;
+    chargedRub?: number;
+    postsCount?: number;
+    balanceRub?: number;
+  } | null;
   drafts: PostDraft[];
   draftsSource: "deepseek" | "local" | null;
+  draftsJob?: {
+    status: "running" | "failed";
+    startedAt: string;
+    phase?: "texts" | "photos";
+    photoDone?: number;
+    photoTotal?: number;
+    error?: string;
+  } | null;
   channels: PublicChannels;
 };
 
@@ -154,11 +172,23 @@ const TELEGRAM_HELP = [
 ];
 
 const VK_HELP = [
-  "Нажмите «Подключить VK».",
-  "Войдите в аккаунт VK и разрешите доступ приложению.",
-  "Выберите сообщество, куда публиковать посты — нужны права администратора.",
-  "Готово: публикации пойдут на стену выбранного сообщества.",
+  "Нажмите «Войти через VK» — откроется окно ВКонтакте.",
+  "Разрешите доступ аккаунтом администратора сообщества.",
+  "После входа скопируйте всю ссылку из адресной строки (начинается с oauth.vk.com/blank.html#…).",
+  "Вставьте ссылку в поле на этой странице и нажмите «Продолжить».",
+  "Выберите сообщество из списка — готово, можно публиковать.",
 ];
+
+const VK_HELP_EN = [
+  "Click “Sign in with VK” — a VK window opens.",
+  "Allow access with the community admin account.",
+  "After login, copy the full address-bar URL (oauth.vk.com/blank.html#…).",
+  "Paste it into the field on this page and click Continue.",
+  "Pick your community from the list — done, you can publish.",
+];
+
+const VK_KATE_AUTH_URL =
+  "https://oauth.vk.com/authorize?client_id=2685278&display=page&redirect_uri=https%3A%2F%2Foauth.vk.com%2Fblank.html&scope=wall%2Cphotos%2Cgroups%2Coffline&response_type=token&v=5.199";
 
 function toggleChannel(list: Channel[], id: Channel): Channel[] {
   if (list.includes(id)) {
@@ -242,6 +272,10 @@ export default function PlanPage() {
   const [step, setStep] = useState<Tab>("drafts");
   const [brief, setBrief] = useState<BrandBrief | null>(null);
   const [pending, setPending] = useState(false);
+  const [planPolling, setPlanPolling] = useState(false);
+  const planPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [draftsPolling, setDraftsPolling] = useState(false);
+  const draftsPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [mobileEdit, setMobileEdit] = useState(false);
@@ -254,6 +288,11 @@ export default function PlanPage() {
   >([]);
   const [tgToken, setTgToken] = useState("");
   const [tgChat, setTgChat] = useState("");
+  const [vkToken, setVkToken] = useState("");
+  const [vkUserToken, setVkUserToken] = useState("");
+  const [vkAppId, setVkAppId] = useState<string | null>(null);
+  const [vkAutoList, setVkAutoList] = useState(false);
+  const [vkGroupId, setVkGroupId] = useState("");
   const [vkPickOpen, setVkPickOpen] = useState(false);
   const [vkGroups, setVkGroups] = useState<
     { id: number; name: string; screenName?: string; photo50?: string }[]
@@ -396,10 +435,22 @@ export default function PlanPage() {
     const active = list.find((p) => p.id === nextId) ?? null;
     if (active) {
       setBrief(briefForForm(active.brief));
-      if (active.drafts?.length) setStep("drafts");
-      else if (active.plan) setStep("plan");
-      else setStep("brief");
+      if (active.draftsJob?.status === "running") {
+        setStep(active.drafts?.length ? "drafts" : "plan");
+      } else if (active.drafts?.length) {
+        setStep("drafts");
+      } else if (active.plan) {
+        setStep("plan");
+      } else {
+        setStep("brief");
+      }
       setSelectedDraftId(active.drafts[0]?.id ?? null);
+      if (active.planJob?.status === "failed" && active.planJob.error) {
+        setError(active.planJob.error);
+      }
+      if (active.draftsJob?.status === "failed" && active.draftsJob.error) {
+        setError(active.draftsJob.error);
+      }
     } else {
       setBrief(null);
       setStep("brief");
@@ -407,6 +458,192 @@ export default function PlanPage() {
     }
     setLoaded(true);
     return list;
+  }, []);
+
+  const stopPlanPolling = useCallback(() => {
+    if (planPollRef.current) {
+      clearInterval(planPollRef.current);
+      planPollRef.current = null;
+    }
+    setPlanPolling(false);
+  }, []);
+
+  const resumePlanPolling = useCallback(
+    (pid: string) => {
+      if (planPollRef.current) return;
+      setPending(true);
+      setPlanPolling(true);
+      setError(null);
+      setNotice(
+        uiLang === "en"
+          ? "Building the weekly plan… You can refresh — generation continues on the server."
+          : "Собираем план на неделю… Можно обновить страницу — генерация продолжается на сервере."
+      );
+
+      const tick = async () => {
+        try {
+          const res = await fetch(`/api/projects/${pid}`);
+          if (!res.ok) return false;
+          const data = await res.json();
+          const p = data.project as PublicProject | undefined;
+          if (!p) return false;
+          setProjects((prev) => prev.map((x) => (x.id === pid ? p : x)));
+          if (typeof p.planJob?.balanceRub === "number") {
+            setBalanceRub(p.planJob.balanceRub);
+          }
+          if (p.plan) {
+            stopPlanPolling();
+            setPending(false);
+            setBrief(briefForForm(p.brief));
+            setStep("plan");
+            void refreshBilling();
+            setNotice(
+              uiLang === "en" ? "Weekly plan is ready." : "План на неделю готов."
+            );
+            return true;
+          }
+          if (p.planJob?.status === "failed") {
+            stopPlanPolling();
+            setPending(false);
+            setError(p.planJob.error || "Не удалось собрать план");
+            if (typeof p.planJob.balanceRub === "number") {
+              setBalanceRub(p.planJob.balanceRub);
+            }
+            void refreshBilling();
+            return true;
+          }
+        } catch {
+          /* keep polling */
+        }
+        return false;
+      };
+
+      void tick().then((done) => {
+        if (done) return;
+        planPollRef.current = setInterval(() => {
+          void tick().then((finished) => {
+            if (finished) stopPlanPolling();
+          });
+        }, 2500);
+      });
+    },
+    [refreshBilling, stopPlanPolling, uiLang]
+  );
+
+  const stopDraftsPolling = useCallback(() => {
+    if (draftsPollRef.current) {
+      clearInterval(draftsPollRef.current);
+      draftsPollRef.current = null;
+    }
+    setDraftsPolling(false);
+  }, []);
+
+  const PHOTO_CONCURRENCY = 3;
+
+  const draftsJobNotice = useCallback(
+    (job: PublicProject["draftsJob"]) => {
+      if (!job || job.status !== "running") return null;
+      if (job.phase === "texts") {
+        return uiLang === "en"
+          ? "Writing post texts… (~30 sec)"
+          : "Пишем тексты постов… (~30 сек)";
+      }
+      if (job.phase === "photos") {
+        const done = job.photoDone ?? 0;
+        const total = job.photoTotal ?? 0;
+        const left = Math.max(0, total - done);
+        const mins = Math.max(1, Math.ceil(left / PHOTO_CONCURRENCY / 2));
+        return uiLang === "en"
+          ? `Texts ready. Generating photos ${done}/${total}… (~${mins} min left). You can read drafts meanwhile.`
+          : `Тексты готовы. Генерируем фото ${done}/${total}… (ещё ~${mins} мин). Черновики уже можно смотреть.`;
+      }
+      return uiLang === "en"
+        ? "Writing post texts and photos… You can refresh — generation continues on the server."
+        : "Пишем тексты и фото… Можно обновить страницу — генерация продолжается на сервере.";
+    },
+    [uiLang]
+  );
+
+  const resumeDraftsPolling = useCallback(
+    (pid: string) => {
+      if (draftsPollRef.current) return;
+      setPending(true);
+      setDraftsPolling(true);
+      setError(null);
+      setNotice(
+        uiLang === "en"
+          ? "Writing post texts… (~30 sec, then photos in parallel)"
+          : "Пишем тексты… (~30 сек, затем фото параллельно)"
+      );
+
+      const tick = async () => {
+        try {
+          const res = await fetch(`/api/projects/${pid}`);
+          if (!res.ok) return false;
+          const data = await res.json();
+          const p = data.project as PublicProject | undefined;
+          if (!p) return false;
+          setProjects((prev) => prev.map((x) => (x.id === pid ? p : x)));
+          const notice = draftsJobNotice(p.draftsJob);
+          if (notice) setNotice(notice);
+          if (p.draftsJob?.status === "running") {
+            if (p.drafts?.length) {
+              setStep("drafts");
+              setSelectedDraftId((prev) => prev ?? p.drafts[0]?.id ?? null);
+            }
+            return false;
+          }
+          if (p.draftsJob?.status === "failed") {
+            stopDraftsPolling();
+            setPending(false);
+            setError(p.draftsJob.error || "Не удалось написать посты");
+            return true;
+          }
+          stopDraftsPolling();
+          setPending(false);
+          setSelectedDraftId(p.drafts[0]?.id ?? null);
+          setStep("drafts");
+          setNotice(
+            uiLang === "en" ? "Post texts are ready." : "Тексты постов готовы."
+          );
+          return true;
+        } catch {
+          /* keep polling */
+        }
+        return false;
+      };
+
+      void tick().then((done) => {
+        if (done) return;
+        draftsPollRef.current = setInterval(() => {
+          void tick().then((finished) => {
+            if (finished) stopDraftsPolling();
+          });
+        }, 2500);
+      });
+    },
+    [draftsJobNotice, stopDraftsPolling, uiLang]
+  );
+
+  useEffect(() => {
+    if (!projectId || !project) return;
+    if (project.planJob?.status === "running" && !planPolling && !project.plan) {
+      resumePlanPolling(projectId);
+    }
+  }, [project, projectId, planPolling, resumePlanPolling]);
+
+  useEffect(() => {
+    if (!projectId || !project) return;
+    if (project.draftsJob?.status === "running" && !draftsPolling) {
+      resumeDraftsPolling(projectId);
+    }
+  }, [project, projectId, draftsPolling, resumeDraftsPolling]);
+
+  useEffect(() => {
+    return () => {
+      if (planPollRef.current) clearInterval(planPollRef.current);
+      if (draftsPollRef.current) clearInterval(draftsPollRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -454,6 +691,16 @@ export default function PlanPage() {
   }, [projectId, step]);
 
   useEffect(() => {
+    void fetch("/api/vk/status")
+      .then((r) => r.json())
+      .then((d) => {
+        setVkAppId(d.appId ?? null);
+        setVkAutoList(Boolean(d.autoConnectReady));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const metaError = params.get("meta_error");
     const metaOk = params.get("meta_ok");
@@ -467,6 +714,29 @@ export default function PlanPage() {
     if (stepParam === "channels") setStep("channels");
     if (metaError) setError(decodeURIComponent(metaError));
     if (vkError) setError(decodeURIComponent(vkError));
+    const vkNotice = params.get("vk_notice");
+    if (vkNotice) {
+      setError(null);
+      setNotice(decodeURIComponent(vkNotice));
+    }
+    if (params.get("vk_photo") === "1") {
+      setError(null);
+      setNotice(
+        uiLang === "en"
+          ? "Personal VK token saved — photo upload enabled."
+          : "Личный токен VK сохранён — загрузка фото включена."
+      );
+      void refreshProjects(projectId);
+    }
+    if (params.get("vk_connected") === "1") {
+      setError(null);
+      setNotice(
+        uiLang === "en"
+          ? "VK community connected."
+          : "Сообщество VK подключено."
+      );
+      void refreshProjects(projectId);
+    }
     if (metaOk) {
       setError(null);
       if (metaStub) {
@@ -585,6 +855,11 @@ export default function PlanPage() {
     if (!projectId || !brief) return;
     setPending(true);
     setError(null);
+    setNotice(
+      uiLang === "en"
+        ? "Building the weekly plan… You can refresh — generation continues on the server."
+        : "Собираем план на неделю… Можно обновить страницу — генерация продолжается на сервере."
+    );
     try {
       await fetch(`/api/projects/${projectId}`, {
         method: "PATCH",
@@ -604,24 +879,33 @@ export default function PlanPage() {
         }
         throw new Error(data.error || "Не удалось собрать план");
       }
-      setProjects((prev) =>
-        prev.map((p) => (p.id === projectId ? data.project : p))
-      );
-      setBrief(briefForForm(data.project.brief));
+      if (data.project) {
+        setProjects((prev) =>
+          prev.map((p) => (p.id === projectId ? data.project : p))
+        );
+      }
       if (data.billing?.chargedRub) {
+        setBalanceRub(data.billing.balanceRub);
         setNotice(
           uiLang === "en"
-            ? `Charged ${data.billing.chargedRub} ₽ for ${data.billing.postsCount} posts. Balance: ${data.billing.balanceRub} ₽`
-            : `Списано ${data.billing.chargedRub} ₽ за ${data.billing.postsCount} постов. Баланс: ${data.billing.balanceRub} ₽`
+            ? `Charged ${data.billing.chargedRub} ₽ for ${data.billing.postsCount} posts. Building plan…`
+            : `Списано ${data.billing.chargedRub} ₽ за ${data.billing.postsCount} постов. Собираем план…`
         );
-        setBalanceRub(data.billing.balanceRub);
+        void refreshBilling();
       }
-      void refreshBilling();
-      setStep("plan");
+      if (data.status === "running" || res.status === 202) {
+        resumePlanPolling(projectId);
+        return;
+      }
+      // fallback: sync response with ready plan
+      if (data.project?.plan) {
+        setBrief(briefForForm(data.project.brief));
+        setStep("plan");
+        setPending(false);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка");
-    } finally {
       setPending(false);
+      setError(e instanceof Error ? e.message : "Ошибка");
     }
   }
 
@@ -629,21 +913,32 @@ export default function PlanPage() {
     if (!projectId) return;
     setPending(true);
     setError(null);
+    setNotice(
+      uiLang === "en"
+        ? "Writing post texts… (~30 sec, then photos in parallel)"
+        : "Пишем тексты… (~30 сек, затем фото параллельно по 3 штуки)"
+    );
     try {
       const res = await fetch(`/api/projects/${projectId}/posts`, {
         method: "POST",
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Не удалось написать посты");
-      setProjects((prev) =>
-        prev.map((p) => (p.id === projectId ? data.project : p))
-      );
+      if (data.project) {
+        setProjects((prev) =>
+          prev.map((p) => (p.id === projectId ? data.project : p))
+        );
+      }
+      if (data.status === "running" || res.status === 202) {
+        resumeDraftsPolling(projectId);
+        return;
+      }
       setSelectedDraftId(data.project?.drafts?.[0]?.id ?? null);
       setStep("drafts");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка");
-    } finally {
       setPending(false);
+    } catch (e) {
+      setPending(false);
+      setError(e instanceof Error ? e.message : "Ошибка");
     }
   }
 
@@ -875,6 +1170,9 @@ export default function PlanPage() {
           prev.map((p) => (p.id === projectId ? data.project : p))
         );
       }
+      if (data.warning) {
+        setNotice(data.warning);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");
     } finally {
@@ -916,7 +1214,20 @@ export default function PlanPage() {
     try {
       const res = await fetch(`/api/vk/groups?projectId=${pid}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Не удалось загрузить сообщества");
+      if (!res.ok) {
+        setVkPickOpen(false);
+        if (data.needsCommunityToken) {
+          setNotice(
+            uiLang === "en"
+              ? "Could not load communities. Enter community ID below and connect again."
+              : "Не удалось загрузить список. Укажите ID группы ниже и нажмите «Подключить VK» ещё раз."
+          );
+          setError(null);
+          setStep("channels");
+          return;
+        }
+        throw new Error(data.error || "Не удалось загрузить сообщества");
+      }
       setVkGroups(data.groups ?? []);
       setVkStubMode(Boolean(data.stub));
       setVkPickOpen(true);
@@ -928,9 +1239,36 @@ export default function PlanPage() {
     }
   }
 
+  function startVkCommunityOAuth(groupId?: string) {
+    if (!projectId) return;
+    const gid = parseVkGroupId(groupId || vkGroupId);
+    if (!gid) {
+      setError(
+        uiLang === "en"
+          ? "Paste vk.com/club123456 link or numeric community ID"
+          : "Вставьте ссылку vk.com/club123456 или ID сообщества"
+      );
+      return;
+    }
+    window.location.href = `/api/vk/start-community?projectId=${encodeURIComponent(projectId)}&groupId=${encodeURIComponent(gid)}`;
+  }
+
+  function openVkLogin() {
+    window.open(VK_KATE_AUTH_URL, "vk_oauth", "noopener,noreferrer,width=720,height=720");
+    setNotice(
+      uiLang === "en"
+        ? "After allowing access, copy the URL from the address bar and paste it below."
+        : "После «Разрешить» скопируйте ссылку из адресной строки и вставьте ниже."
+    );
+  }
+
   function startVkOAuth() {
     if (!projectId) return;
-    window.location.href = `/api/vk/start?projectId=${encodeURIComponent(projectId)}`;
+    if (vkAutoList) {
+      window.location.href = `/api/vk/start?projectId=${encodeURIComponent(projectId)}`;
+      return;
+    }
+    openVkLogin();
   }
 
   async function connectVkGroup(groupId: number) {
@@ -945,26 +1283,61 @@ export default function PlanPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Не подключено");
-      setProjects((prev) =>
-        prev.map((p) => (p.id === projectId ? data.project : p))
-      );
-      setVkPickOpen(false);
-      setVkGroups([]);
-      if (data.stub) {
-        setNotice(
-          uiLang === "en"
-            ? "VK connected in demo mode (stub). Posts will not go to a real community."
-            : "VK подключён в тестовом режиме (заглушка). Посты не уйдут в реальное сообщество."
-        );
-      } else {
-        setNotice(
-          uiLang === "en" ? "VK community connected." : "Сообщество VK подключено."
+      if (data.project) {
+        setProjects((prev) =>
+          prev.map((p) => (p.id === projectId ? data.project : p))
         );
       }
+      setVkPickOpen(false);
+      setVkGroups([]);
+      setVkToken("");
+      setNotice(
+        uiLang === "en" ? "VK community connected." : "Сообщество VK подключено."
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");
     } finally {
       setPending(false);
+    }
+  }
+
+  async function importVkTokenAndPick(rawToken?: string) {
+    if (!projectId) return;
+    const token = parseVkAccessToken(rawToken ?? vkToken);
+    if (!token) {
+      setError(
+        uiLang === "en"
+          ? "Paste the full URL from the VK window (or the access_token)"
+          : "Вставьте полную ссылку из окна VK (или access_token)"
+      );
+      return;
+    }
+    setPending(true);
+    setVkPickLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/vk/import-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, accessToken: token }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Не удалось войти в VK");
+      setVkGroups(data.groups ?? []);
+      setVkStubMode(Boolean(data.stub));
+      setVkPickOpen(true);
+      setVkToken("");
+      setNotice(
+        uiLang === "en"
+          ? "Choose a community to publish to."
+          : "Выберите сообщество для публикации."
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка");
+      setVkPickOpen(false);
+    } finally {
+      setPending(false);
+      setVkPickLoading(false);
     }
   }
 
@@ -989,6 +1362,92 @@ export default function PlanPage() {
       );
       setTgToken("");
       setTgChat("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function connectVkUserToken() {
+    if (!projectId || !vkUserToken.trim()) return;
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/vk/user-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          accessToken: vkUserToken.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Не удалось сохранить токен");
+      if (data.project) {
+        setProjects((prev) =>
+          prev.map((p) => (p.id === projectId ? data.project : p))
+        );
+      }
+      setVkUserToken("");
+      setNotice(
+        uiLang === "en"
+          ? "Personal VK token saved — photo upload enabled."
+          : "Личный токен VK сохранён — загрузка фото включена."
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function connectVkManual() {
+    if (!projectId) return;
+    const project = projects.find((p) => p.id === projectId);
+    const gid =
+      parseVkGroupId(vkGroupId) ||
+      project?.channels.vk?.groupId?.replace(/^-/, "") ||
+      null;
+    const token = parseVkAccessToken(vkToken);
+    if (!gid) {
+      setError(
+        uiLang === "en"
+          ? "Paste vk.com/club123456 link or numeric community ID"
+          : "Вставьте ссылку vk.com/club123456 или ID сообщества"
+      );
+      return;
+    }
+    if (!token) {
+      setError(
+        uiLang === "en"
+          ? "Paste the access_token from vkhost.github.io (Kate Mobile)"
+          : "Вставьте access_token с vkhost.github.io (Kate Mobile)"
+      );
+      return;
+    }
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/channels`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel: "vk",
+          accessToken: token,
+          groupId: gid,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Не подключено");
+      setProjects((prev) =>
+        prev.map((p) => (p.id === projectId ? data.project : p))
+      );
+      setVkToken("");
+      setVkGroupId("");
+      setNotice(
+        uiLang === "en" ? "VK community connected." : "Сообщество VK подключено."
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");
     } finally {
@@ -2284,7 +2743,7 @@ export default function PlanPage() {
                             ? "How to connect VK"
                             : "Как подключить VK"
                         }
-                        steps={VK_HELP}
+                        steps={uiLang === "en" ? VK_HELP_EN : VK_HELP}
                       />
                     </div>
                     {project.channels.vk.connected ? (
@@ -2302,6 +2761,44 @@ export default function PlanPage() {
                             </>
                           )}
                         </p>
+                        {!project.channels.vk.isStub && (
+                          <details className={styles.full}>
+                            <summary className={styles.fieldHint}>
+                              {uiLang === "en"
+                                ? "Reconnect / change community"
+                                : "Переподключить / сменить сообщество"}
+                            </summary>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={pending}
+                              onClick={openVkLogin}
+                            >
+                              {uiLang === "en"
+                                ? "Sign in with VK again"
+                                : "Войти через VK снова"}
+                            </button>
+                            <label className={styles.full}>
+                              {uiLang === "en"
+                                ? "Paste URL from VK window"
+                                : "Вставьте ссылку из окна VK"}
+                              <input
+                                value={vkToken}
+                                onChange={(e) => setVkToken(e.target.value)}
+                                placeholder="https://oauth.vk.com/blank.html#access_token=..."
+                                autoComplete="off"
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={pending || !vkToken.trim()}
+                              onClick={() => void importVkTokenAndPick()}
+                            >
+                              {uiLang === "en" ? "Continue" : "Продолжить"}
+                            </button>
+                          </details>
+                        )}
                         <button
                           type="button"
                           className="btn btn-ghost"
@@ -2314,8 +2811,8 @@ export default function PlanPage() {
                       <div className={styles.form}>
                         <p className={styles.fieldHint}>
                           {uiLang === "en"
-                            ? "Log in with VK and pick a community — like in other apps."
-                            : "Войдите через VK и выберите сообщество — как в других приложениях."}
+                            ? "2 steps: sign in to VK, paste the link, pick a community."
+                            : "2 шага: войдите в VK, вставьте ссылку, выберите сообщество."}
                         </p>
                         <button
                           type="button"
@@ -2323,7 +2820,47 @@ export default function PlanPage() {
                           disabled={pending || vkPickLoading}
                           onClick={startVkOAuth}
                         >
-                          {vkPickLoading ? "…" : t.connectVk}
+                          {uiLang === "en" ? "1. Sign in with VK" : "1. Войти через VK"}
+                        </button>
+                        <label className={styles.full}>
+                          {uiLang === "en"
+                            ? "2. Paste the URL from the address bar"
+                            : "2. Вставьте ссылку из адресной строки"}
+                          <input
+                            value={vkToken}
+                            onChange={(e) => setVkToken(e.target.value)}
+                            onPaste={(e) => {
+                              const text = e.clipboardData.getData("text");
+                              if (/access_token=/i.test(text)) {
+                                e.preventDefault();
+                                setVkToken(text.trim());
+                                void importVkTokenAndPick(text.trim());
+                              }
+                            }}
+                            placeholder="https://oauth.vk.com/blank.html#access_token=..."
+                            autoComplete="off"
+                          />
+                        </label>
+                        <p className={styles.fieldHint}>
+                          {uiLang === "en"
+                            ? "After “Allow”, copy the full link from the VK window (starts with oauth.vk.com/blank.html)."
+                            : "После «Разрешить» скопируйте всю ссылку из окна VK (начинается с oauth.vk.com/blank.html)."}
+                        </p>
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={
+                            pending || vkPickLoading || !vkToken.trim()
+                          }
+                          onClick={() => void importVkTokenAndPick()}
+                        >
+                          {vkPickLoading
+                            ? uiLang === "en"
+                              ? "Loading…"
+                              : "Загрузка…"
+                            : uiLang === "en"
+                              ? "Continue — choose community"
+                              : "Продолжить — выбрать сообщество"}
                         </button>
                       </div>
                     )}

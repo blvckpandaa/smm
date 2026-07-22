@@ -49,6 +49,7 @@ export async function POST(req: Request, ctx: Ctx) {
       postId?: string;
       messageId?: string;
       error?: string;
+      warning?: string;
       refreshedCreds?: Record<string, unknown>;
     };
 
@@ -70,7 +71,14 @@ export async function POST(req: Request, ctx: Ctx) {
           { status: 400 }
         );
       }
-      result = await publishToVk({ ...draft, channel: "vk" }, project.channels.vk);
+      result = await publishToVk(
+        { ...draft, channel: "vk" },
+        {
+          accessToken: project.channels.vk.accessToken,
+          groupId: project.channels.vk.groupId,
+          userAccessToken: project.channels.vk.userAccessToken,
+        }
+      );
     } else if (channel === "facebook") {
       if (!project.channels.facebook) {
         return Response.json(
@@ -137,7 +145,7 @@ export async function POST(req: Request, ctx: Ctx) {
             ...draft,
             status: "published" as const,
             publishedExternalId: externalId,
-            publishError: undefined,
+            publishError: result.warning,
           }
         : d
     );
@@ -146,6 +154,7 @@ export async function POST(req: Request, ctx: Ctx) {
       ok: true,
       externalId,
       channel,
+      warning: result.warning,
       project: toPublicProject(updated!),
     });
   } catch (error) {

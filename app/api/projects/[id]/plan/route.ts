@@ -4,10 +4,11 @@ import { POST_PRICE_RUB } from "@/lib/billing/pricing";
 import { resolvePostFrequency } from "@/lib/marketer/frequency";
 import { isValidTimeZone } from "@/lib/marketer/timezone";
 import { slotFromLocalInput } from "@/lib/schedule/pick-time";
-import type { ContentPlan, PlannedPost } from "@/lib/marketer/types";
+import type { BrandBrief, ContentPlan, PlannedPost } from "@/lib/marketer/types";
 import type { PostDraft } from "@/lib/smm/types";
 import {
   chargeUserForPosts,
+  creditUserBalance,
   getProjectForUser,
   getUserById,
   toPublicProject,
@@ -15,6 +16,61 @@ import {
 } from "@/lib/store/projects";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+const PLAN_JOB_TTL_MS = 15 * 60_000;
+
+function isPlanJobFresh(
+  job: { status: string; startedAt: string } | null | undefined
+): boolean {
+  if (!job || job.status !== "running") return false;
+  const started = Date.parse(job.startedAt);
+  if (!Number.isFinite(started)) return false;
+  return Date.now() - started < PLAN_JOB_TTL_MS;
+}
+
+async function runPlanJob(input: {
+  projectId: string;
+  userId: string;
+  brief: BrandBrief;
+  chargedRub: number;
+  postsCount: number;
+}) {
+  const { projectId, userId, brief, chargedRub, postsCount } = input;
+  try {
+    const { plan, source } = await buildContentPlan(brief);
+    updateProject(projectId, userId, {
+      brief,
+      plan,
+      planSource: source,
+      drafts: [],
+      draftsSource: null,
+      draftsJob: null,
+      planJob: null,
+      ...(brief.brandName ? { name: brief.brandName } : {}),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Ошибка плана";
+    if (chargedRub > 0) {
+      creditUserBalance({
+        userId,
+        amountRub: chargedRub,
+        description: `Возврат: не удалось собрать план (${postsCount} постов)`,
+        yooPaymentId: `refund-plan-${projectId}-${Date.now()}`,
+      });
+    }
+    const user = getUserById(userId);
+    updateProject(projectId, userId, {
+      planJob: {
+        status: "failed",
+        startedAt: new Date().toISOString(),
+        error: message,
+        chargedRub,
+        postsCount,
+        balanceRub: user?.balanceRub,
+      },
+    });
+  }
+}
 
 export async function POST(req: Request, ctx: Ctx) {
   const auth = await requireSession();
@@ -24,6 +80,26 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!project) return Response.json({ error: "Проект не найден" }, { status: 404 });
 
   try {
+    if (isPlanJobFresh(project.planJob)) {
+      return Response.json(
+        {
+          ok: true,
+          status: "running",
+          project: toPublicProject(project),
+          billing: {
+            chargedRub: project.planJob?.chargedRub ?? 0,
+            balanceRub:
+              project.planJob?.balanceRub ??
+              getUserById(auth.session.userId)?.balanceRub ??
+              0,
+            postsCount: project.planJob?.postsCount ?? 0,
+            postPriceRub: POST_PRICE_RUB,
+          },
+        },
+        { status: 202 }
+      );
+    }
+
     const body = (await req.json().catch(() => ({}))) as {
       brief?: typeof project.brief;
     };
@@ -58,31 +134,50 @@ export async function POST(req: Request, ctx: Ctx) {
       );
     }
 
-    const { plan, source } = await buildContentPlan(brief);
-
+    const user = getUserById(auth.session.userId);
+    const startedAt = new Date().toISOString();
     const updated = updateProject(id, auth.session.userId, {
       brief,
-      plan,
-      planSource: source,
+      plan: null,
+      planSource: null,
       drafts: [],
       draftsSource: null,
+      draftsJob: null,
       name: brief.brandName || project.name,
-    });
-
-    const user = getUserById(auth.session.userId);
-
-    return Response.json({
-      project: toPublicProject(updated!),
-      plan,
-      source,
-      billing: {
+      planJob: {
+        status: "running",
+        startedAt,
         chargedRub: charge.chargedRub,
-        balanceRub: user?.balanceRub ?? charge.balanceRub,
         postsCount,
-        postsPerDay: freq.postsPerDay,
-        postPriceRub: POST_PRICE_RUB,
+        balanceRub: user?.balanceRub ?? charge.balanceRub,
       },
     });
+
+    // Фоновая генерация: не ждём DeepSeek в HTTP-ответе,
+    // чтобы обновление страницы не отменяло работу.
+    void runPlanJob({
+      projectId: id,
+      userId: auth.session.userId,
+      brief,
+      chargedRub: charge.chargedRub,
+      postsCount,
+    });
+
+    return Response.json(
+      {
+        ok: true,
+        status: "running",
+        project: toPublicProject(updated!),
+        billing: {
+          chargedRub: charge.chargedRub,
+          balanceRub: user?.balanceRub ?? charge.balanceRub,
+          postsCount,
+          postsPerDay: freq.postsPerDay,
+          postPriceRub: POST_PRICE_RUB,
+        },
+      },
+      { status: 202 }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка плана";
     return Response.json({ error: message }, { status: 500 });

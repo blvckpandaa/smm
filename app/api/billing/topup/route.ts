@@ -54,6 +54,7 @@ export async function POST(req: Request) {
       amountRub,
       description: `Пополнение SMM-Agents на ${amountRub} ₽`,
       returnUrl: billingReturnUrl(),
+      customerEmail: user.email,
       metadata: {
         userId: auth.session.userId,
         purpose: "balance_topup",
