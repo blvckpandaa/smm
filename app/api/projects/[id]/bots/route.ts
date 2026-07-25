@@ -31,6 +31,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
       mode?: BotReplyMode;
       faq?: FaqItem[];
       discussionChatId?: string;
+      vkConfirmation?: string;
+      vkSecret?: string;
       refreshVkSecrets?: boolean;
       refreshTelegramWebhook?: boolean;
     };
@@ -59,9 +61,21 @@ export async function PATCH(req: Request, ctx: Ctx) {
       next.discussionChatId = body.discussionChatId.trim() || undefined;
     }
 
-    if (channel === "vk" && (body.refreshVkSecrets || !next.vkConfirmation)) {
-      next.vkConfirmation = secrets.vkConfirmation;
-      next.vkSecret = secrets.vkSecret;
+    if (channel === "vk") {
+      if (typeof body.vkConfirmation === "string") {
+        const c = body.vkConfirmation.trim().slice(0, 64);
+        if (c) next.vkConfirmation = c;
+      }
+      if (typeof body.vkSecret === "string") {
+        next.vkSecret = body.vkSecret.trim().slice(0, 128) || undefined;
+      }
+      if (body.refreshVkSecrets) {
+        next.vkConfirmation = secrets.vkConfirmation;
+        next.vkSecret = secrets.vkSecret;
+      } else if (!next.vkConfirmation) {
+        next.vkConfirmation = secrets.vkConfirmation;
+        if (!next.vkSecret) next.vkSecret = secrets.vkSecret;
+      }
     }
 
     if (channel === "telegram") {

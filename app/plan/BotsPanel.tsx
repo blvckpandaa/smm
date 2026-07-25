@@ -80,11 +80,14 @@ export function BotsPanel({
   const [discussionChatId, setDiscussionChatId] = useState(
     bots.telegram.discussionChatId ?? ""
   );
+  const [vkConfirmInput, setVkConfirmInput] = useState("");
+  const [vkSecretInput, setVkSecretInput] = useState("");
   const [vkSecrets, setVkSecrets] = useState<{
     confirmation?: string;
     secret?: string;
     callbackUrl?: string;
   } | null>(null);
+  const callbackUrlFull = "https://smm-agents.ru/api/vk/comments/webhook";
   const callbackIsLocal =
     typeof window !== "undefined" &&
     (window.location.hostname === "localhost" ||
@@ -183,8 +186,10 @@ export function BotsPanel({
       setVkSecrets({
         confirmation: data.vk?.confirmation,
         secret: data.vk?.secret,
-        callbackUrl: data.callbackUrl,
+        callbackUrl: data.callbackUrl || callbackUrlFull,
       });
+      if (data.vk?.confirmation) setVkConfirmInput(data.vk.confirmation);
+      if (data.vk?.secret) setVkSecretInput(data.vk.secret);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -374,32 +379,45 @@ export function BotsPanel({
             {channel === "vk" && (
               <div className={styles.botVkBox}>
                 <h4>{t.botsVkCallback}</h4>
+                <p className={styles.error}>
+                  {uiLang === "en"
+                    ? "URL must end with /webhook (not /webhc). Confirmation string in the cabinet must match the one VK shows."
+                    : "В адресе должно быть /webhook (не /webhc). Строка подтверждения в кабинете = та, что показывает VK (например 9c610e7d)."}
+                </p>
                 {callbackIsLocal && (
                   <p className={styles.error}>
                     {uiLang === "en"
-                      ? "Localhost only for UI. For VK Callback use production: https://smm-agents.ru (set APP_URL there)."
-                      : "Локально UI можно смотреть так. Для Callback VK тестируйте на https://smm-agents.ru (APP_URL на сервере)."}
+                      ? "Localhost only for UI. For VK Callback use production: https://smm-agents.ru"
+                      : "Локально UI можно смотреть так. Callback VK — только на https://smm-agents.ru"}
                   </p>
                 )}
                 <p className={styles.cellSub}>{t.botsVkHint}</p>
+                <p>
+                  <strong>{t.botsVkCallbackUrl}</strong>
+                  <br />
+                  <code>{callbackUrlFull}</code>
+                </p>
                 <ol className={styles.botChecklist}>
                   <li>
-                    {bots.vk.paidActive
+                    {bots.vk.paidActive && bots.vk.enabled
                       ? "✓ "
                       : "1. "}
                     {uiLang === "en" ? "Bot paid & on" : "Бот оплачен и включён"}
-                    {bots.vk.paidActive && bots.vk.enabled ? " ✓" : ""}
                   </li>
                   <li>
                     {uiLang === "en"
-                      ? "2. Community → Manage → Callback API → Server URL ="
-                      : "2. Сообщество → Управление → Callback API → URL ="}{" "}
-                    <code>/api/vk/comments/webhook</code>
+                      ? "2. Paste the exact URL above into VK (…/webhook)"
+                      : "2. Вставьте в VK точный URL выше (…/webhook)"}
                   </li>
                   <li>
                     {uiLang === "en"
-                      ? "3. Paste confirmation + secret from cabinet; enable event «Wall reply» (wall_reply_new)"
-                      : "3. Вставьте строку подтверждения и секрет из кабинета; событие «Комментарий на стене» (wall_reply_new)"}
+                      ? "3. Copy confirmation from VK into the field below, same for secret; save; then click Confirm in VK"
+                      : "3. Скопируйте строку подтверждения из VK в поле ниже и секретный ключ; сохраните; затем «Подтвердить» в VK"}
+                  </li>
+                  <li>
+                    {uiLang === "en"
+                      ? "4. Enable event wall_reply_new (wall comment)"
+                      : "4. Включите событие «Комментарий на стене» (wall_reply_new)"}
                   </li>
                   <li>
                     {bots.vk.lastWebhookAt
@@ -411,24 +429,57 @@ export function BotsPanel({
                             : ""
                         }`
                       : uiLang === "en"
-                        ? "4. No Callback hits yet — VK never reached this server"
-                        : "4. Callback ещё не приходил — VK не достучался до сервера"}
+                        ? "5. No Callback hits yet"
+                        : "5. Callback ещё не приходил"}
                   </li>
                 </ol>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={pending}
-                  onClick={() => loadVkSecrets()}
-                >
-                  {t.botsShowSecrets}
-                </button>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>{t.botsVkConfirm}</span>
+                  <input
+                    className={styles.fieldControl}
+                    value={vkConfirmInput}
+                    onChange={(e) => setVkConfirmInput(e.target.value)}
+                    placeholder="9c610e7d"
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span className={styles.fieldLabel}>{t.botsVkSecret}</span>
+                  <input
+                    className={styles.fieldControl}
+                    value={vkSecretInput}
+                    onChange={(e) => setVkSecretInput(e.target.value)}
+                    placeholder="aaQ13axAPQEcczQa"
+                  />
+                </label>
+                <div className={styles.botFaqActions}>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={pending || !vkConfirmInput.trim()}
+                    onClick={() =>
+                      patch("vk", {
+                        vkConfirmation: vkConfirmInput.trim(),
+                        vkSecret: vkSecretInput.trim(),
+                      })
+                    }
+                  >
+                    {t.botsSave}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={pending}
+                    onClick={() => loadVkSecrets()}
+                  >
+                    {t.botsShowSecrets}
+                  </button>
+                </div>
                 {vkSecrets && (
                   <div className={styles.botSecrets}>
                     <p>
                       <strong>{t.botsVkCallbackUrl}</strong>
                       <br />
-                      <code>{vkSecrets.callbackUrl}</code>
+                      <code>{vkSecrets.callbackUrl || callbackUrlFull}</code>
                     </p>
                     <p>
                       <strong>{t.botsVkConfirm}</strong>

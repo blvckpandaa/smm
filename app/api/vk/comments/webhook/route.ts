@@ -60,9 +60,9 @@ export async function POST(req: Request) {
   let bot = project ? getCommentBot(project, "vk") : null;
 
   if (body.type === "confirmation") {
-    // Если группа ещё не сматчилась — ищем единственный активный VK-бот
-    if (!bot?.vkConfirmation) {
-      // fallback: нельзя угадать confirmation без проекта
+    const code = bot?.vkConfirmation?.trim();
+    if (!code) {
+      // Без строки из кабинета VK всегда получит «неправильный ответ»
       return new Response("ok", {
         status: 200,
         headers: { "Content-Type": "text/plain; charset=utf-8" },
@@ -71,12 +71,16 @@ export async function POST(req: Request) {
     if (project) {
       touchBotWebhook(project.id, "vk", {
         type: "confirmation",
-        note: "VK подтвердил Callback URL",
+        note: `Отдали confirmation «${code}»`,
       });
     }
-    return new Response(bot.vkConfirmation, {
+    // VK ждёт сырой текст без JSON/HTML/пробелов по краям
+    return new Response(code, {
       status: 200,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
     });
   }
 
