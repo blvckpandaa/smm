@@ -5,7 +5,11 @@ export function getDeepSeekApiKey(): string | undefined {
 }
 
 export function getDeepSeekModel(): string {
-  return process.env.DEEPSEEK_MODEL?.trim() || "deepseek-chat";
+  // deepseek-chat retired 2026-07-24 → use explicit V4 ids
+  const raw = process.env.DEEPSEEK_MODEL?.trim() || "deepseek-v4-flash";
+  if (raw === "deepseek-chat") return "deepseek-v4-flash";
+  if (raw === "deepseek-reasoner") return "deepseek-v4-flash";
+  return raw;
 }
 
 export function isDeepSeekConfigured(): boolean {
@@ -37,6 +41,8 @@ export async function deepseekChat(options: {
     body: JSON.stringify({
       model: getDeepSeekModel(),
       temperature: options.temperature ?? 0.7,
+      // V4: без этого thinking-режим может оставить content пустым
+      thinking: { type: "disabled" },
       messages: [
         { role: "system", content: options.system },
         { role: "user", content: options.user },
