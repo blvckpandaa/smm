@@ -19,7 +19,7 @@ import {
   UI_LANG_KEY,
 } from "@/lib/i18n/ui";
 import { isValidWebsiteUrl, normalizeWebsiteUrl } from "@/lib/marketer/website";
-import { parseVkAccessToken, parseVkGroupId } from "@/lib/vk/parse-group-id";
+import { parseVkGroupId } from "@/lib/vk/parse-group-id";
 import styles from "./plan.module.css";
 
 const CHANNELS: { id: Channel; label: string }[] = [
@@ -172,19 +172,17 @@ const TELEGRAM_HELP = [
 ];
 
 const VK_HELP = [
-  "Нажмите «Войти через VK» — откроется окно ВКонтакте.",
+  "Нажмите «Подключить VK» — откроется вход ВКонтакте.",
   "Разрешите доступ аккаунтом администратора сообщества.",
-  "После входа скопируйте всю ссылку из адресной строки (начинается с oauth.vk.com/blank.html#…).",
-  "Вставьте ссылку в поле на этой странице и нажмите «Продолжить».",
-  "Выберите сообщество из списка — готово, можно публиковать.",
+  "Вас вернёт в кабинет — выберите сообщество. Копировать ссылку из адресной строки не нужно.",
+  "В настройках приложения VK укажите Redirect URI: http://localhost:3000/api/vk/callback",
 ];
 
 const VK_HELP_EN = [
-  "Click “Sign in with VK” — a VK window opens.",
-  "Allow access with the community admin account.",
-  "After login, copy the full address-bar URL (oauth.vk.com/blank.html#…).",
-  "Paste it into the field on this page and click Continue.",
-  "Pick your community from the list — done, you can publish.",
+  "Click “Connect VK” — VK login opens.",
+  "Allow access with a community admin account.",
+  "You’ll return to the cabinet — pick a community. No copying from the address bar.",
+  "In VK app settings set Redirect URI: http://localhost:3000/api/vk/callback",
 ];
 
 const VK_KATE_AUTH_URL =
@@ -1257,18 +1255,14 @@ export default function PlanPage() {
     window.open(VK_KATE_AUTH_URL, "vk_oauth", "noopener,noreferrer,width=720,height=720");
     setNotice(
       uiLang === "en"
-        ? "After allowing access, copy the URL from the address bar and paste it below."
-        : "После «Разрешить» скопируйте ссылку из адресной строки и вставьте ниже."
+        ? "Fallback only: after Allow, paste the FULL blank.html URL below. Prefer “Connect VK” above — it does not need copying."
+        : "Запасной способ: после «Разрешить» вставьте всю ссылку blank.html ниже. Лучше кнопка «Подключить VK» сверху — без копирования."
     );
   }
 
   function startVkOAuth() {
     if (!projectId) return;
-    if (vkAutoList) {
-      window.location.href = `/api/vk/start?projectId=${encodeURIComponent(projectId)}`;
-      return;
-    }
-    openVkLogin();
+    window.location.href = `/api/vk/start?projectId=${encodeURIComponent(projectId)}`;
   }
 
   async function connectVkGroup(groupId: number) {
@@ -1301,14 +1295,15 @@ export default function PlanPage() {
     }
   }
 
-  async function importVkTokenAndPick(rawToken?: string) {
+  async function connectVkAny(rawToken?: string) {
     if (!projectId) return;
-    const token = parseVkAccessToken(rawToken ?? vkToken);
-    if (!token) {
+    const raw = (rawToken ?? vkToken).trim();
+    const groupHint = vkGroupId.trim();
+    if (!raw && !groupHint) {
       setError(
         uiLang === "en"
-          ? "Paste the full URL from the VK window (or the access_token)"
-          : "Вставьте полную ссылку из окна VK (или access_token)"
+          ? "Paste the VK URL/token (and community link if needed)"
+          : "Вставьте ссылку/токен VK (и ссылку на сообщество, если нужно)"
       );
       return;
     }
@@ -1316,21 +1311,50 @@ export default function PlanPage() {
     setVkPickLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/vk/import-token", {
+      const res = await fetch("/api/vk/connect-any", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, accessToken: token }),
+        body: JSON.stringify({
+          projectId,
+          accessToken: raw || undefined,
+          groupId: groupHint || undefined,
+          raw: raw || undefined,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Не удалось войти в VK");
-      setVkGroups(data.groups ?? []);
-      setVkStubMode(Boolean(data.stub));
-      setVkPickOpen(true);
-      setVkToken("");
-      setNotice(
-        uiLang === "en"
-          ? "Choose a community to publish to."
-          : "Выберите сообщество для публикации."
+      if (!res.ok) throw new Error(data.error || "Не удалось подключить VK");
+
+      if (data.project) {
+        setProjects((prev) =>
+          prev.map((p) => (p.id === projectId ? data.project : p))
+        );
+        setVkPickOpen(false);
+        setVkGroups([]);
+        setVkToken("");
+        setVkGroupId("");
+        setNotice(
+          uiLang === "en"
+            ? "VK connected — wall posting verified."
+            : "VK подключён — публикация на стену проверена."
+        );
+        return;
+      }
+
+      if (data.pickGroups && Array.isArray(data.groups)) {
+        setVkGroups(data.groups);
+        setVkStubMode(Boolean(data.stub));
+        setVkPickOpen(true);
+        setVkToken("");
+        setNotice(
+          uiLang === "en"
+            ? "Choose a community to publish to."
+            : "Выберите сообщество для публикации."
+        );
+        return;
+      }
+
+      throw new Error(
+        uiLang === "en" ? "Unexpected VK response" : "Неожиданный ответ VK"
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");
@@ -1339,6 +1363,10 @@ export default function PlanPage() {
       setPending(false);
       setVkPickLoading(false);
     }
+  }
+
+  async function importVkTokenAndPick(rawToken?: string) {
+    await connectVkAny(rawToken);
   }
 
   async function connectTelegram() {
@@ -1403,56 +1431,7 @@ export default function PlanPage() {
   }
 
   async function connectVkManual() {
-    if (!projectId) return;
-    const project = projects.find((p) => p.id === projectId);
-    const gid =
-      parseVkGroupId(vkGroupId) ||
-      project?.channels.vk?.groupId?.replace(/^-/, "") ||
-      null;
-    const token = parseVkAccessToken(vkToken);
-    if (!gid) {
-      setError(
-        uiLang === "en"
-          ? "Paste vk.com/club123456 link or numeric community ID"
-          : "Вставьте ссылку vk.com/club123456 или ID сообщества"
-      );
-      return;
-    }
-    if (!token) {
-      setError(
-        uiLang === "en"
-          ? "Paste the access_token from vkhost.github.io (Kate Mobile)"
-          : "Вставьте access_token с vkhost.github.io (Kate Mobile)"
-      );
-      return;
-    }
-    setPending(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/channels`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          channel: "vk",
-          accessToken: token,
-          groupId: gid,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Не подключено");
-      setProjects((prev) =>
-        prev.map((p) => (p.id === projectId ? data.project : p))
-      );
-      setVkToken("");
-      setVkGroupId("");
-      setNotice(
-        uiLang === "en" ? "VK community connected." : "Сообщество VK подключено."
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setPending(false);
-    }
+    await connectVkAny();
   }
 
   async function disconnectChannel(
@@ -2793,7 +2772,7 @@ export default function PlanPage() {
                               type="button"
                               className="btn btn-ghost"
                               disabled={pending || !vkToken.trim()}
-                              onClick={() => void importVkTokenAndPick()}
+                              onClick={() => void connectVkAny()}
                             >
                               {uiLang === "en" ? "Continue" : "Продолжить"}
                             </button>
@@ -2809,59 +2788,118 @@ export default function PlanPage() {
                       </>
                     ) : (
                       <div className={styles.form}>
-                        <p className={styles.fieldHint}>
+                        <div className={`${styles.full} ${styles.billingHint}`}>
                           {uiLang === "en"
-                            ? "2 steps: sign in to VK, paste the link, pick a community."
-                            : "2 шага: войдите в VK, вставьте ссылку, выберите сообщество."}
-                        </p>
+                            ? "One click: sign in to VK and pick a community. No copying from the address bar."
+                            : "Один клик: войдите в VK и выберите сообщество. Без копирования из адресной строки."}
+                        </div>
                         <button
                           type="button"
                           className="btn"
                           disabled={pending || vkPickLoading}
                           onClick={startVkOAuth}
                         >
-                          {uiLang === "en" ? "1. Sign in with VK" : "1. Войти через VK"}
+                          {t.connectVk}
                         </button>
-                        <label className={styles.full}>
-                          {uiLang === "en"
-                            ? "2. Paste the URL from the address bar"
-                            : "2. Вставьте ссылку из адресной строки"}
-                          <input
-                            value={vkToken}
-                            onChange={(e) => setVkToken(e.target.value)}
-                            onPaste={(e) => {
-                              const text = e.clipboardData.getData("text");
-                              if (/access_token=/i.test(text)) {
-                                e.preventDefault();
-                                setVkToken(text.trim());
-                                void importVkTokenAndPick(text.trim());
-                              }
-                            }}
-                            placeholder="https://oauth.vk.com/blank.html#access_token=..."
-                            autoComplete="off"
-                          />
-                        </label>
                         <p className={styles.fieldHint}>
                           {uiLang === "en"
-                            ? "After “Allow”, copy the full link from the VK window (starts with oauth.vk.com/blank.html)."
-                            : "После «Разрешить» скопируйте всю ссылку из окна VK (начинается с oauth.vk.com/blank.html)."}
+                            ? "VK app Redirect URI must be: http://localhost:3000/api/vk/callback"
+                            : "В приложении VK в Redirect URI должно быть: http://localhost:3000/api/vk/callback"}
                         </p>
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={
-                            pending || vkPickLoading || !vkToken.trim()
-                          }
-                          onClick={() => void importVkTokenAndPick()}
-                        >
-                          {vkPickLoading
-                            ? uiLang === "en"
-                              ? "Loading…"
-                              : "Загрузка…"
-                            : uiLang === "en"
-                              ? "Continue — choose community"
-                              : "Продолжить — выбрать сообщество"}
-                        </button>
+
+                        <details className={styles.full}>
+                          <summary className={styles.fieldHint}>
+                            {uiLang === "en"
+                              ? "Or connect with community link + token"
+                              : "Или подключить ссылкой на сообщество + токен"}
+                          </summary>
+                          <label className={styles.full}>
+                            {uiLang === "en"
+                              ? "Community link or ID"
+                              : "Ссылка или ID сообщества"}
+                            <input
+                              value={vkGroupId}
+                              onChange={(e) => setVkGroupId(e.target.value)}
+                              placeholder="vk.com/club123456"
+                              autoComplete="off"
+                            />
+                          </label>
+                          <label className={styles.full}>
+                            {uiLang === "en"
+                              ? "Access token"
+                              : "Токен доступа"}
+                            <input
+                              value={vkToken}
+                              onChange={(e) => setVkToken(e.target.value)}
+                              placeholder="vk1.a...."
+                              autoComplete="off"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={
+                              pending ||
+                              (!vkToken.trim() && !vkGroupId.trim())
+                            }
+                            onClick={() => void connectVkAny()}
+                          >
+                            {pending
+                              ? uiLang === "en"
+                                ? "Connecting…"
+                                : "Подключаем…"
+                              : uiLang === "en"
+                                ? "Connect and verify"
+                                : "Подключить и проверить"}
+                          </button>
+                        </details>
+
+                        <details className={styles.full}>
+                          <summary className={styles.fieldHint}>
+                            {uiLang === "en"
+                              ? "Last resort: paste blank.html URL (VK will show a warning)"
+                              : "Крайний случай: вставить ссылку blank.html (VK покажет предупреждение)"}
+                          </summary>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={pending}
+                            onClick={openVkLogin}
+                          >
+                            {uiLang === "en"
+                              ? "Open VK login window"
+                              : "Открыть окно входа VK"}
+                          </button>
+                          <label className={styles.full}>
+                            {uiLang === "en"
+                              ? "Paste URL from VK window"
+                              : "Вставьте ссылку из окна VK"}
+                            <input
+                              value={vkToken}
+                              onChange={(e) => setVkToken(e.target.value)}
+                              onPaste={(e) => {
+                                const text = e.clipboardData.getData("text");
+                                if (/access_token=/i.test(text)) {
+                                  e.preventDefault();
+                                  setVkToken(text.trim());
+                                  void connectVkAny(text.trim());
+                                }
+                              }}
+                              placeholder="https://oauth.vk.com/blank.html#access_token=..."
+                              autoComplete="off"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={
+                              pending || vkPickLoading || !vkToken.trim()
+                            }
+                            onClick={() => void connectVkAny()}
+                          >
+                            {uiLang === "en" ? "Continue" : "Продолжить"}
+                          </button>
+                        </details>
                       </div>
                     )}
                   </article>

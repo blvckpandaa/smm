@@ -23,11 +23,12 @@ export function getVkOAuthAppSecret(): string | undefined {
 }
 
 export function hasDedicatedVkOAuthApp(): boolean {
+  /** Отдельное legacy-приложение «Веб-сайт» на oauth.vk.com */
   return Boolean(process.env.VK_OAUTH_APP_ID?.trim());
 }
 
 export function isVkConfigured(): boolean {
-  return Boolean(getVkOAuthAppId() && getVkOAuthAppSecret());
+  return Boolean(getVkAppId() && getVkAppSecret());
 }
 
 export function useVkStub(): boolean {
@@ -38,8 +39,29 @@ export function useVkStub(): boolean {
   return !isVkConfigured();
 }
 
-export function getVkRedirectUri(): string {
-  return `${getAppUrl()}/api/vk/callback`;
+export function getVkRedirectUri(origin?: string): string {
+  const base = (origin || getAppUrl()).replace(/\/$/, "");
+  return `${base}/api/vk/callback`;
+}
+
+/** Origin для OAuth: на localhost берём хост запроса, иначе APP_URL. */
+export function resolveOAuthOrigin(req: Request): string {
+  const reqUrl = new URL(req.url);
+  if (
+    reqUrl.hostname === "localhost" ||
+    reqUrl.hostname === "127.0.0.1"
+  ) {
+    return `${reqUrl.protocol}//${reqUrl.host}`;
+  }
+  const forwarded =
+    req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const proto =
+    req.headers.get("x-forwarded-proto") ||
+    (reqUrl.protocol === "https:" ? "https" : "http");
+  if (forwarded && !forwarded.includes("localhost")) {
+    return `${proto}://${forwarded.split(",")[0].trim()}`;
+  }
+  return getAppUrl();
 }
 
 /** VK ID: логин + scope groups для списка сообществ (если VK разрешит). */
@@ -78,13 +100,14 @@ export function buildVkKateMobileAuthUrl(): string {
 export function buildVkCommunityAuthUrl(input: {
   groupId: string;
   state: string;
+  redirectUri?: string;
 }): string {
   const groupId = input.groupId.replace(/^-/, "").trim();
   const params = new URLSearchParams({
     client_id: getVkOAuthAppId()!,
     group_ids: groupId,
     display: "page",
-    redirect_uri: getVkRedirectUri(),
+    redirect_uri: input.redirectUri || getVkRedirectUri(),
     scope: VK_COMMUNITY_SCOPES,
     response_type: "token",
     state: input.state,
@@ -93,14 +116,34 @@ export function buildVkCommunityAuthUrl(input: {
   return `https://oauth.vk.com/authorize?${params}`;
 }
 
-/** Шаг 1 автоподключения: вход пользователя VK → список его сообществ. */
-export function buildVkLegacyUserAuthUrl(input: { state: string }): string {
+/** Implicit OAuth: токен сразу на наш /api/vk/callback#access_token=… — без blank.html и без копирования. */
+export function buildVkImplicitUserAuthUrl(input: {
+  state: string;
+  redirectUri: string;
+}): string {
   const params = new URLSearchParams({
     client_id: getVkOAuthAppId()!,
     display: "page",
-    redirect_uri: getVkRedirectUri(),
+    redirect_uri: input.redirectUri,
     scope: VK_LEGACY_USER_SCOPES,
     response_type: "token",
+    state: input.state,
+    v: "5.199",
+  });
+  return `https://oauth.vk.com/authorize?${params}`;
+}
+
+/** Шаг 1: вход пользователя VK → список сообществ (authorization code). */
+export function buildVkLegacyUserAuthUrl(input: {
+  state: string;
+  redirectUri?: string;
+}): string {
+  const params = new URLSearchParams({
+    client_id: getVkOAuthAppId()!,
+    display: "page",
+    redirect_uri: input.redirectUri || getVkRedirectUri(),
+    scope: VK_LEGACY_USER_SCOPES,
+    response_type: "code",
     state: input.state,
     v: "5.199",
   });
@@ -126,6 +169,7 @@ export function beginVkOAuthFlow(input: {
   projectId: string;
   userId: string;
   purpose?: "connect" | "photo";
+  redirectUri?: string;
 }): { state: string; codeChallenge: string; codeVerifier: string } {
   const { verifier, challenge } = createPkcePair();
   const flow = savePendingVkOAuthFlow({
@@ -133,6 +177,7 @@ export function beginVkOAuthFlow(input: {
     userId: input.userId,
     codeVerifier: verifier,
     purpose: input.purpose,
+    redirectUri: input.redirectUri,
   });
   return { state: flow.state, codeChallenge: challenge, codeVerifier: verifier };
 }
@@ -140,19 +185,20 @@ export function beginVkOAuthFlow(input: {
 export type VkOAuthFlow = PendingVkOAuthFlow;
 
 /** Авторизация через VK ID (новые приложения с id.vk.com). */
-export function buildVkAuthUrl(
-  state: string,
-  codeChallenge: string,
-  scope = VK_ID_SCOPES
-): string {
+export function buildVkAuthUrl(input: {
+  state: string;
+  codeChallenge: string;
+  scope?: string;
+  redirectUri?: string;
+}): string {
   const params = new URLSearchParams({
     response_type: "code",
     client_id: getVkAppId()!,
-    redirect_uri: getVkRedirectUri(),
-    state,
-    code_challenge: codeChallenge,
+    redirect_uri: input.redirectUri || getVkRedirectUri(),
+    state: input.state,
+    code_challenge: input.codeChallenge,
     code_challenge_method: "S256",
-    scope,
+    scope: input.scope || VK_ID_SCOPES,
   });
   return `https://id.vk.ru/authorize?${params}`;
 }

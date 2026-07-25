@@ -15,7 +15,11 @@ export const VK_COMMUNITY_CALLBACK_HTML = `<!DOCTYPE html>
   }
   var state = q.get("state") || params.state || "";
   if (params.error || q.get("error")) {
-    location.replace("/plan?vk_error=" + encodeURIComponent(params.error_description || params.error || q.get("error_description") || q.get("error") || "access_denied"));
+    var errText = params.error_description || params.error || q.get("error_description") || q.get("error") || "access_denied";
+    if (/security error/i.test(errText)) {
+      errText = "Security Error: приложение VK должно быть типа «Веб-сайт» или Standalone, а в Redirect URI — " + location.origin + "/api/vk/callback (не blank.html). Создайте приложение на vk.com/apps?act=manage.";
+    }
+    location.replace("/plan?vk_error=" + encodeURIComponent(errText) + "&step=channels");
     return;
   }
   var token = null;
@@ -28,7 +32,10 @@ export const VK_COMMUNITY_CALLBACK_HTML = `<!DOCTYPE html>
   });
   if (!token && params.access_token) token = params.access_token;
   if (!token || !state) {
-    location.replace("/plan?vk_error=" + encodeURIComponent("VK не вернул токен"));
+    var msg = !token
+      ? "VK не вернул токен. В настройках приложения укажите Redirect URI: " + location.origin + "/api/vk/callback"
+      : "Сессия истекла — нажмите «Подключить VK» ещё раз";
+    location.replace("/plan?vk_error=" + encodeURIComponent(msg) + "&step=channels");
     return;
   }
   var endpoint = groupId ? "/api/vk/community-token" : "/api/vk/oauth-session";

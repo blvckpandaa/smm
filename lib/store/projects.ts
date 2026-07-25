@@ -52,6 +52,7 @@ export type PendingVkOAuthFlow = {
   projectId: string;
   userId: string;
   codeVerifier: string;
+  redirectUri?: string;
   /** connect — выбор сообщества; photo — личный токен для загрузки фото */
   purpose?: "connect" | "photo";
   createdAt: string;
@@ -154,11 +155,12 @@ export type DraftsJob = {
   error?: string;
 };
 
-/** Выдача личного токена VK (oauth.vk.com) для загрузки фото. */
+/** Pending VK user OAuth (authorization code). */
 export type PendingVkUserFlow = {
   state: string;
   projectId: string;
   userId: string;
+  redirectUri?: string;
   createdAt: string;
 };
 
@@ -822,6 +824,7 @@ export function savePendingVkOAuthFlow(input: {
   userId: string;
   codeVerifier: string;
   purpose?: "connect" | "photo";
+  redirectUri?: string;
 }): PendingVkOAuthFlow {
   const store = ensureStore();
   const state = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
@@ -831,6 +834,7 @@ export function savePendingVkOAuthFlow(input: {
     projectId: input.projectId,
     userId: input.userId,
     codeVerifier: input.codeVerifier,
+    redirectUri: input.redirectUri,
     purpose,
     createdAt: new Date().toISOString(),
   };
@@ -912,6 +916,7 @@ export function clearPendingVkCommunityFlow(state: string): void {
 export function savePendingVkUserFlow(input: {
   projectId: string;
   userId: string;
+  redirectUri: string;
 }): PendingVkUserFlow {
   const store = ensureStore();
   const state = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
@@ -919,6 +924,7 @@ export function savePendingVkUserFlow(input: {
     state,
     projectId: input.projectId,
     userId: input.userId,
+    redirectUri: input.redirectUri,
     createdAt: new Date().toISOString(),
   };
   store.pendingVkUser = [

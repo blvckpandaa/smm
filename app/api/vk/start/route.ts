@@ -6,29 +6,40 @@ import {
   savePendingVkUserFlow,
 } from "@/lib/store/projects";
 import {
-  buildVkLegacyUserAuthUrl,
+  buildVkImplicitUserAuthUrl,
   getVkOAuthAppId,
-  hasDedicatedVkOAuthApp,
+  getVkRedirectUri,
+  resolveOAuthOrigin,
   useVkStub,
 } from "@/lib/vk/config";
 
-/** Автоподключение VK: oauth.vk.com → выбор сообщества → токен сообщества. */
+/**
+ * Подключение VK без копирования из адресной строки:
+ * oauth.vk.com → редирект на наш /api/vk/callback#access_token=…
+ * HTML сам читает hash и сохраняет сессию.
+ *
+ * Нужно приложение типа «Веб-сайт» / Standalone с Redirect URI =
+ * http://localhost:3000/api/vk/callback (и прод).
+ */
 export async function GET(req: Request) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
 
   const url = new URL(req.url);
   const projectId = url.searchParams.get("projectId")?.trim();
+  const origin = resolveOAuthOrigin(req);
+  const home = origin.includes("localhost") ? origin : getAppUrl();
+
   if (!projectId) {
     return Response.redirect(
-      `${getAppUrl()}/plan?vk_error=${encodeURIComponent("Нет projectId")}`
+      `${home}/plan?vk_error=${encodeURIComponent("Нет projectId")}`
     );
   }
 
   const project = getProjectForUser(projectId, auth.session.userId);
   if (!project) {
     return Response.redirect(
-      `${getAppUrl()}/plan?vk_error=${encodeURIComponent("Проект не найден")}`
+      `${home}/plan?vk_error=${encodeURIComponent("Проект не найден")}`
     );
   }
 
@@ -41,37 +52,33 @@ export async function GET(req: Request) {
       isStub: true,
     });
     return Response.redirect(
-      `${getAppUrl()}/plan?vk_pick=1&vk_stub=1&projectId=${encodeURIComponent(projectId)}&step=channels`
+      `${home}/plan?vk_pick=1&vk_stub=1&projectId=${encodeURIComponent(projectId)}&step=channels`
     );
   }
 
   if (!getVkOAuthAppId()) {
     return Response.redirect(
-      `${getAppUrl()}/plan?vk_error=${encodeURIComponent(
-        "VK не настроен на сервере"
-      )}`
+      `${home}/plan?vk_error=${encodeURIComponent(
+        "Добавьте VK_APP_ID в .env"
+      )}&step=channels`
     );
   }
 
   const groupId = url.searchParams.get("groupId")?.trim()?.replace(/^-/, "");
   if (groupId) {
     return Response.redirect(
-      `${getAppUrl()}/api/vk/start-community?projectId=${encodeURIComponent(projectId)}&groupId=${encodeURIComponent(groupId)}`
+      `${home}/api/vk/start-community?projectId=${encodeURIComponent(projectId)}&groupId=${encodeURIComponent(groupId)}`
     );
   }
 
-  if (!hasDedicatedVkOAuthApp()) {
-    return Response.redirect(
-      `${getAppUrl()}/plan?step=channels&vk_error=${encodeURIComponent(
-        "Укажите ссылку или ID сообщества VK в поле ниже"
-      )}`
-    );
-  }
-
+  const redirectUri = getVkRedirectUri(origin);
   const flow = savePendingVkUserFlow({
     projectId,
     userId: auth.session.userId,
+    redirectUri,
   });
 
-  return Response.redirect(buildVkLegacyUserAuthUrl({ state: flow.state }));
+  return Response.redirect(
+    buildVkImplicitUserAuthUrl({ state: flow.state, redirectUri })
+  );
 }

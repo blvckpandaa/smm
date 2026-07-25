@@ -1,6 +1,8 @@
 import {
   getVkAppId,
   getVkAppSecret,
+  getVkOAuthAppId,
+  getVkOAuthAppSecret,
   getVkRedirectUri,
 } from "./config";
 
@@ -16,6 +18,7 @@ export async function exchangeVkIdCode(input: {
   codeVerifier: string;
   deviceId: string;
   state?: string;
+  redirectUri?: string;
 }): Promise<{
   accessToken: string;
   userId: number;
@@ -28,7 +31,7 @@ export async function exchangeVkIdCode(input: {
     code_verifier: input.codeVerifier,
     client_id: getVkAppId()!,
     device_id: input.deviceId,
-    redirect_uri: getVkRedirectUri(),
+    redirect_uri: input.redirectUri || getVkRedirectUri(),
   });
   if (input.state) body.set("state", input.state);
   const secret = getVkAppSecret();
@@ -63,15 +66,18 @@ export async function exchangeVkIdCode(input: {
 }
 
 /** Legacy oauth.vk.com exchange (старые приложения «Веб-сайт»). */
-export async function exchangeVkCode(code: string): Promise<{
+export async function exchangeVkCode(
+  code: string,
+  redirectUri?: string
+): Promise<{
   accessToken: string;
   userId: number;
   expiresIn?: number;
 }> {
   const params = new URLSearchParams({
-    client_id: getVkAppId()!,
-    client_secret: getVkAppSecret()!,
-    redirect_uri: getVkRedirectUri(),
+    client_id: getVkOAuthAppId() || getVkAppId()!,
+    client_secret: getVkOAuthAppSecret() || getVkAppSecret()!,
+    redirect_uri: redirectUri || getVkRedirectUri(),
     code,
   });
   const res = await fetch(`https://oauth.vk.com/access_token?${params}`);
