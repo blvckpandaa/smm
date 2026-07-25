@@ -80,8 +80,6 @@ export function BotsPanel({
   const [discussionChatId, setDiscussionChatId] = useState(
     bots.telegram.discussionChatId ?? ""
   );
-  const [vkConfirmInput, setVkConfirmInput] = useState("");
-  const [vkSecretInput, setVkSecretInput] = useState("");
   const [vkSecrets, setVkSecrets] = useState<{
     confirmation?: string;
     secret?: string;
@@ -188,8 +186,39 @@ export function BotsPanel({
         secret: data.vk?.secret,
         callbackUrl: data.callbackUrl || callbackUrlFull,
       });
-      if (data.vk?.confirmation) setVkConfirmInput(data.vk.confirmation);
-      if (data.vk?.secret) setVkSecretInput(data.vk.secret);
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Error");
+    } finally {
+      onBusy(false);
+    }
+  }
+
+  async function syncVkCallback() {
+    onBusy(true);
+    onError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/bots/vk-sync`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sync failed");
+      if (data.project) onProject(data.project);
+      setVkSecrets({
+        confirmation: data.confirmation,
+        secret: data.secret,
+        callbackUrl: data.callbackUrl || callbackUrlFull,
+      });
+      onNotice(
+        data.serverOk
+          ? uiLang === "en"
+            ? "VK Callback synced — press Confirm in VK if needed"
+            : "Callback синхронизирован — при необходимости нажмите «Подтвердить» в VK"
+          : data.serverWarning ||
+            (uiLang === "en"
+              ? "Confirmation loaded from VK. Add URL manually, then Confirm."
+              : "Строка confirmation получена у VK. Добавьте URL вручную и нажмите «Подтвердить».")
+      );
+      if (data.serverWarning) onError(data.serverWarning);
     } catch (e) {
       onError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -379,19 +408,18 @@ export function BotsPanel({
             {channel === "vk" && (
               <div className={styles.botVkBox}>
                 <h4>{t.botsVkCallback}</h4>
-                <p className={styles.error}>
+                <p className={styles.scheduleNote}>
                   {uiLang === "en"
-                    ? "URL must end with /webhook (not /webhc). Confirmation string in the cabinet must match the one VK shows."
-                    : "В адресе должно быть /webhook (не /webhc). Строка подтверждения в кабинете = та, что показывает VK (например 9c610e7d)."}
+                    ? "Confirmation string comes from VK automatically. Our webhook asks VK for it on Confirm — you don’t type it."
+                    : "Строку подтверждения выдаёт VK. Наш webhook при «Подтвердить» сам запрашивает её у VK — вручную вводить не нужно."}
                 </p>
                 {callbackIsLocal && (
                   <p className={styles.error}>
                     {uiLang === "en"
-                      ? "Localhost only for UI. For VK Callback use production: https://smm-agents.ru"
-                      : "Локально UI можно смотреть так. Callback VK — только на https://smm-agents.ru"}
+                      ? "Use production https://smm-agents.ru for Callback"
+                      : "Callback проверяйте на https://smm-agents.ru"}
                   </p>
                 )}
-                <p className={styles.cellSub}>{t.botsVkHint}</p>
                 <p>
                   <strong>{t.botsVkCallbackUrl}</strong>
                   <br />
@@ -399,29 +427,32 @@ export function BotsPanel({
                 </p>
                 <ol className={styles.botChecklist}>
                   <li>
-                    {bots.vk.paidActive && bots.vk.enabled
-                      ? "✓ "
-                      : "1. "}
+                    {bots.vk.paidActive && bots.vk.enabled ? "✓ " : "1. "}
                     {uiLang === "en" ? "Bot paid & on" : "Бот оплачен и включён"}
                   </li>
                   <li>
                     {uiLang === "en"
-                      ? "2. Paste the exact URL above into VK (…/webhook)"
-                      : "2. Вставьте в VK точный URL выше (…/webhook)"}
+                      ? "2. Press «Sync Callback» below (loads confirmation from VK)"
+                      : "2. Нажмите «Синхронизировать Callback» (подтянет строку у VK)"}
                   </li>
                   <li>
                     {uiLang === "en"
-                      ? "3. Copy confirmation from VK into the field below, same for secret; save; then click Confirm in VK"
-                      : "3. Скопируйте строку подтверждения из VK в поле ниже и секретный ключ; сохраните; затем «Подтвердить» в VK"}
+                      ? "3. In VK: URL = address above (…/webhook), secret = from cabinet if shown"
+                      : "3. В VK: адрес = URL выше (…/webhook), секрет = из кабинета если показан"}
                   </li>
                   <li>
                     {uiLang === "en"
-                      ? "4. Enable event wall_reply_new (wall comment)"
-                      : "4. Включите событие «Комментарий на стене» (wall_reply_new)"}
+                      ? "4. Click Confirm in VK — our server returns VK’s own string"
+                      : "4. В VK нажмите «Подтвердить» — сервер вернёт строку, которую дал сам VK"}
+                  </li>
+                  <li>
+                    {uiLang === "en"
+                      ? "5. Enable event wall_reply_new"
+                      : "5. Включите событие «Комментарий на стене»"}
                   </li>
                   <li>
                     {bots.vk.lastWebhookAt
-                      ? `✓ Callback был: ${new Date(
+                      ? `✓ Callback: ${new Date(
                           bots.vk.lastWebhookAt
                         ).toLocaleString(uiLang === "en" ? "en-GB" : "ru-RU")}${
                           bots.vk.lastWebhookNote
@@ -429,41 +460,20 @@ export function BotsPanel({
                             : ""
                         }`
                       : uiLang === "en"
-                        ? "5. No Callback hits yet"
-                        : "5. Callback ещё не приходил"}
+                        ? "6. Waiting for first Callback hit"
+                        : "6. Ждём первый Callback"}
                   </li>
                 </ol>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>{t.botsVkConfirm}</span>
-                  <input
-                    className={styles.fieldControl}
-                    value={vkConfirmInput}
-                    onChange={(e) => setVkConfirmInput(e.target.value)}
-                    placeholder="9c610e7d"
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>{t.botsVkSecret}</span>
-                  <input
-                    className={styles.fieldControl}
-                    value={vkSecretInput}
-                    onChange={(e) => setVkSecretInput(e.target.value)}
-                    placeholder="aaQ13axAPQEcczQa"
-                  />
-                </label>
                 <div className={styles.botFaqActions}>
                   <button
                     type="button"
                     className="btn"
-                    disabled={pending || !vkConfirmInput.trim()}
-                    onClick={() =>
-                      patch("vk", {
-                        vkConfirmation: vkConfirmInput.trim(),
-                        vkSecret: vkSecretInput.trim(),
-                      })
-                    }
+                    disabled={pending}
+                    onClick={() => syncVkCallback()}
                   >
-                    {t.botsSave}
+                    {uiLang === "en"
+                      ? "Sync Callback with VK"
+                      : "Синхронизировать Callback"}
                   </button>
                   <button
                     type="button"
@@ -484,12 +494,18 @@ export function BotsPanel({
                     <p>
                       <strong>{t.botsVkConfirm}</strong>
                       <br />
-                      <code>{vkSecrets.confirmation}</code>
+                      <code>{vkSecrets.confirmation || "—"}</code>
+                      <span className={styles.cellSub}>
+                        {" "}
+                        {uiLang === "en"
+                          ? "(from VK API, not typed by you)"
+                          : "(из API VK, не вводится вручную)"}
+                      </span>
                     </p>
                     <p>
                       <strong>{t.botsVkSecret}</strong>
                       <br />
-                      <code>{vkSecrets.secret}</code>
+                      <code>{vkSecrets.secret || "—"}</code>
                     </p>
                   </div>
                 )}

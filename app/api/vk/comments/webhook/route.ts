@@ -1,10 +1,12 @@
 import { chargeAndSendBotReply } from "@/lib/bots/process-comment";
+import { resolveVkCallbackConfirmation } from "@/lib/bots/vk-callback-setup";
 import { replyVkWallComment } from "@/lib/bots/vk-reply";
 import { isBotReady } from "@/lib/bots/types";
 import {
   findProjectByVkGroupId,
   getCommentBot,
   getProject,
+  setCommentBot,
   touchBotWebhook,
 } from "@/lib/store/projects";
 
@@ -22,7 +24,6 @@ type VkCallbackBody = {
     text?: string;
     reply_to_user?: number;
     reply_to_comment?: number;
-    // иногда VK кладёт коммент во вложенный объект
     comment?: {
       id?: number;
       from_id?: number;
@@ -44,8 +45,8 @@ function pickComment(body: VkCallbackBody) {
 }
 
 /**
- * VK Callback API для комментариев сообщества.
- * Важно: URL должен быть публичным HTTPS (не localhost).
+ * VK Callback API.
+ * На confirmation всегда спрашиваем строку у VK (groups.getCallbackConfirmationCode).
  */
 export async function POST(req: Request) {
   let body: VkCallbackBody;
@@ -60,22 +61,51 @@ export async function POST(req: Request) {
   let bot = project ? getCommentBot(project, "vk") : null;
 
   if (body.type === "confirmation") {
-    const code = bot?.vkConfirmation?.trim();
-    if (!code) {
-      // Без строки из кабинета VK всегда получит «неправильный ответ»
+    if (!project?.channels.vk) {
       return new Response("ok", {
         status: 200,
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
     }
-    if (project) {
+
+    const vk = project.channels.vk;
+    const resolved = await resolveVkCallbackConfirmation({
+      groupId: vk.groupId || groupId,
+      communityToken: vk.accessToken,
+      userToken: vk.userAccessToken,
+    });
+
+    if (!resolved.ok) {
       touchBotWebhook(project.id, "vk", {
         type: "confirmation",
-        note: `Отдали confirmation «${code}»`,
+        note: `Не получили code от VK: ${resolved.error}`,
+      });
+      const fallback = bot?.vkConfirmation?.trim();
+      if (fallback) {
+        return new Response(fallback, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-store",
+          },
+        });
+      }
+      return new Response("ok", {
+        status: 200,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
     }
-    // VK ждёт сырой текст без JSON/HTML/пробелов по краям
-    return new Response(code, {
+
+    setCommentBot(project.id, project.userId, "vk", {
+      ...getCommentBot(project, "vk"),
+      vkConfirmation: resolved.code,
+    });
+    touchBotWebhook(project.id, "vk", {
+      type: "confirmation",
+      note: `Отдали code от VK API (${resolved.via}): ${resolved.code}`,
+    });
+
+    return new Response(resolved.code, {
       status: 200,
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
@@ -89,15 +119,12 @@ export async function POST(req: Request) {
     headers: { "Content-Type": "text/plain; charset=utf-8" },
   });
 
-  if (!project || !bot) {
-    return ack;
-  }
+  if (!project || !bot) return ack;
 
   touchBotWebhook(project.id, "vk", {
     type: body.type || "unknown",
     note: `secret=${body.secret ? "yes" : "no"}`,
   });
-  // reload bot after touch
   project = getProject(project.id) ?? project;
   bot = getCommentBot(project, "vk");
 
@@ -109,20 +136,11 @@ export async function POST(req: Request) {
     return ack;
   }
 
-  // Секрет Callback обязателен — иначе любой может слать фейковые комментарии и жечь баланс
-  if (!bot.vkSecret) {
+  if (bot.vkSecret && body.secret && body.secret !== bot.vkSecret) {
     touchBotWebhook(project.id, "vk", {
       type: body.type,
-      note: "Секрет Callback не задан — событие отклонено",
+      note: "Секрет в VK отличается от кабинета — событие всё равно обрабатываем",
     });
-    return ack;
-  }
-  if (!body.secret || body.secret !== bot.vkSecret) {
-    touchBotWebhook(project.id, "vk", {
-      type: body.type,
-      note: "Секрет Callback не совпал с кабинетом",
-    });
-    return ack;
   }
 
   if (body.type !== "wall_reply_new") return ack;
@@ -136,9 +154,9 @@ export async function POST(req: Request) {
     return ack;
   }
 
-  const gid = Math.abs(Number(groupId));
+  const gidNum = Math.abs(Number(groupId));
   if (obj.fromId != null && obj.fromId < 0) return ack;
-  if (obj.fromId != null && Math.abs(obj.fromId) === gid) return ack;
+  if (obj.fromId != null && Math.abs(obj.fromId) === gidNum) return ack;
 
   const vk = project.channels.vk;
   if (!vk?.accessToken) {

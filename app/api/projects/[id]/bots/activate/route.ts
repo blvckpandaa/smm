@@ -75,10 +75,7 @@ export async function POST(req: Request, ctx: Ctx) {
       ...current,
       enabled: true,
       paidUntil,
-      vkConfirmation:
-        channel === "vk"
-          ? current.vkConfirmation || secrets.vkConfirmation
-          : current.vkConfirmation,
+      vkConfirmation: current.vkConfirmation,
       vkSecret:
         channel === "vk" ? current.vkSecret || secrets.vkSecret : current.vkSecret,
       webhookSecret:
@@ -87,13 +84,44 @@ export async function POST(req: Request, ctx: Ctx) {
           : current.webhookSecret,
     };
 
+    let vkSyncWarning: string | undefined;
+    if (channel === "vk" && project.channels.vk) {
+      const { resolveVkCallbackConfirmation, ensureVkCallbackServer } =
+        await import("@/lib/bots/vk-callback-setup");
+      const vk = project.channels.vk;
+      const conf = await resolveVkCallbackConfirmation({
+        groupId: vk.groupId,
+        communityToken: vk.accessToken,
+        userToken: vk.userAccessToken,
+      });
+      if (conf.ok) {
+        next.vkConfirmation = conf.code;
+      } else {
+        vkSyncWarning = `Confirmation у VK не получен: ${conf.error}`;
+      }
+      const server = await ensureVkCallbackServer({
+        accessToken: vk.userAccessToken || vk.accessToken,
+        groupId: vk.groupId,
+        secret: next.vkSecret || secrets.vkSecret,
+      });
+      if (!next.vkSecret) next.vkSecret = secrets.vkSecret;
+      if (!server.ok) {
+        vkSyncWarning = [
+          vkSyncWarning,
+          server.error ||
+            "Добавьте Callback URL вручную и нажмите «Подтвердить» — строку сервер возьмёт у VK сам.",
+        ]
+          .filter(Boolean)
+          .join(" ");
+      }
+    }
+
     if (channel === "telegram" && project.channels.telegram && next.webhookSecret) {
       const hook = await setTelegramWebhook({
         botToken: project.channels.telegram.botToken,
         secret: next.webhookSecret,
       });
       if (!hook.ok) {
-        // период уже оплачен — оставляем бота, но сообщаем про webhook
         setCommentBot(id, auth.session.userId, channel, next);
         const updated = getProjectForUser(id, auth.session.userId);
         const user = getUserById(auth.session.userId);
@@ -124,6 +152,7 @@ export async function POST(req: Request, ctx: Ctx) {
         channel === "vk" ? `${getAppUrl()}/api/vk/comments/webhook` : undefined,
       confirmation: channel === "vk" ? next.vkConfirmation : undefined,
       secret: channel === "vk" ? next.vkSecret : undefined,
+      warning: vkSyncWarning,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Ошибка активации бота";

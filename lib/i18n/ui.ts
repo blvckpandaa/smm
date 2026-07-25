@@ -125,7 +125,7 @@ export const dict = {
     botsVkConfirm: "Строка подтверждения",
     botsVkSecret: "Секретный ключ",
     botsVkHint:
-      "Сообщество → Управление → Callback API → URL https://smm-agents.ru/api/vk/comments/webhook, событие «Комментарий на стене», строка и секрет из кабинета.",
+      "URL: https://smm-agents.ru/api/vk/comments/webhook. Строку подтверждения webhook берёт у VK сам — нажмите «Синхронизировать Callback», затем «Подтвердить» в сообществе.",
     botsHistory: "Последние ответы",
     botsHistoryEmpty: "Пока нет ответов",
     botsGoChannels: "К каналам",
