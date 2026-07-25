@@ -105,15 +105,20 @@ export async function POST(req: Request) {
     return ack;
   }
 
-  // Если в VK указан секрет — он обязан совпасть
-  if (bot.vkSecret) {
-    if (!body.secret || body.secret !== bot.vkSecret) {
-      touchBotWebhook(project.id, "vk", {
-        type: body.type,
-        note: "Секрет Callback не совпал с кабинетом",
-      });
-      return ack;
-    }
+  // Секрет Callback обязателен — иначе любой может слать фейковые комментарии и жечь баланс
+  if (!bot.vkSecret) {
+    touchBotWebhook(project.id, "vk", {
+      type: body.type,
+      note: "Секрет Callback не задан — событие отклонено",
+    });
+    return ack;
+  }
+  if (!body.secret || body.secret !== bot.vkSecret) {
+    touchBotWebhook(project.id, "vk", {
+      type: body.type,
+      note: "Секрет Callback не совпал с кабинетом",
+    });
+    return ack;
   }
 
   if (body.type !== "wall_reply_new") return ack;

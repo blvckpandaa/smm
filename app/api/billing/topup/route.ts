@@ -33,6 +33,16 @@ export async function POST(req: Request) {
     }
 
     if (!isYooKassaConfigured()) {
+      // В проде демо-зачисление запрещено (иначе любой юзер может накрутить баланс)
+      if (
+        process.env.NODE_ENV === "production" &&
+        process.env.ALLOW_DEMO_TOPUP !== "1"
+      ) {
+        return Response.json(
+          { error: "Оплата временно недоступна. ЮKassa не настроена." },
+          { status: 503 }
+        );
+      }
       const credited = creditUserBalance({
         userId: auth.session.userId,
         amountRub,

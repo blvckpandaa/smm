@@ -4,8 +4,17 @@ const COOKIE = "smm_agents_session";
 const MAX_AGE_SEC = 60 * 60 * 24 * 30; // 30 days
 
 function secret(): string {
+  const fromEnv = process.env.AUTH_SECRET?.trim();
+  if (fromEnv && fromEnv.length >= 32) return fromEnv;
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "AUTH_SECRET must be set to a strong value (≥32 chars) in production"
+    );
+  }
+
   return (
-    process.env.AUTH_SECRET?.trim() ||
+    fromEnv ||
     process.env.DEEPSEEK_API_KEY?.trim() ||
     "smm-agents-dev-secret-change-me"
   );

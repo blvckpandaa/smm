@@ -14,9 +14,54 @@ const sampleSlots = [
   { time: "13:17", channel: "TG", topic: "Вопрос подписчикам" },
 ];
 
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://smm-agents.ru/#website",
+      url: "https://smm-agents.ru/",
+      name: "SMM-Agents",
+      description:
+        "ИИ-кабинет для Telegram и VK: план постов, автопубликация и боты комментариев",
+      inLanguage: "ru-RU",
+      publisher: { "@id": "https://smm-agents.ru/#org" },
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://smm-agents.ru/#org",
+      name: "SMM-Agents",
+      url: "https://smm-agents.ru/",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://smm-agents.ru/icon-512.png",
+      },
+    },
+    {
+      "@type": "SoftwareApplication",
+      name: "SMM-Agents",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      url: "https://smm-agents.ru/",
+      description:
+        "Сервис для генерации и публикации постов в Telegram и VK, а также автоответов на комментарии с помощью FAQ или ИИ",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "RUB",
+        description: "Регистрация и старт с пополнением баланса",
+      },
+    },
+  ],
+};
+
 export default function HomePage() {
   return (
     <main>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <header className={styles.nav}>
         <div className={`container ${styles.navInner}`}>
           <Link href="/" className={styles.logo}>

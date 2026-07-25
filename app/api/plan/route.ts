@@ -1,7 +1,11 @@
 import type { BrandBrief } from "@/lib/marketer/types";
 import { buildContentPlan, isDeepSeekConfigured } from "@/lib/ai/deepseek";
+import { requireSession } from "@/lib/auth/request";
 
 export async function POST(req: Request) {
+  const auth = await requireSession();
+  if (!auth.ok) return auth.response;
+
   try {
     const brief = (await req.json()) as BrandBrief;
 
@@ -40,6 +44,9 @@ export async function POST(req: Request) {
 }
 
 export async function GET() {
+  const auth = await requireSession();
+  if (!auth.ok) return auth.response;
+
   return Response.json({
     aiConfigured: isDeepSeekConfigured(),
     provider: "deepseek",

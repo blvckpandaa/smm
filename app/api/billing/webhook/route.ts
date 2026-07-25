@@ -19,6 +19,10 @@ type WebhookBody = {
 /** HTTP-уведомления ЮKassa: payment.succeeded → зачисление на баланс */
 export async function POST(req: Request) {
   try {
+    if (!isYooKassaConfigured()) {
+      return Response.json({ error: "YooKassa not configured" }, { status: 503 });
+    }
+
     const body = (await req.json()) as WebhookBody;
     if (body.event !== "payment.succeeded" || !body.object?.id) {
       return Response.json({ ok: true });
@@ -26,30 +30,28 @@ export async function POST(req: Request) {
 
     const paymentId = body.object.id;
     const pending = findPendingTopUp(paymentId);
-    const metaUserId = body.object.metadata?.userId;
-    const userId = pending?.userId || metaUserId;
-    if (!userId) {
+    if (!pending) {
+      // Неизвестный платёж — не доверяем payload (анти-подделка)
       return Response.json({ ok: true });
     }
 
-    let amountRub = pending?.amountRub;
-    if (!amountRub && body.object.amount?.value) {
-      amountRub = Math.round(parseFloat(body.object.amount.value));
+    const userId = pending.userId;
+    let amountRub = pending.amountRub;
+
+    // Обязательная проверка статуса у ЮKassa — без неё не зачисляем
+    let live;
+    try {
+      live = await getYooPayment(paymentId);
+    } catch {
+      return Response.json({ error: "verify failed" }, { status: 502 });
     }
 
-    // Дополнительная проверка статуса у ЮKassa, если ключи есть
-    if (isYooKassaConfigured()) {
-      try {
-        const live = await getYooPayment(paymentId);
-        if (live.status !== "succeeded" && !live.paid) {
-          return Response.json({ ok: true });
-        }
-        if (live.amount?.value) {
-          amountRub = Math.round(parseFloat(live.amount.value));
-        }
-      } catch {
-        /* webhook всё равно обработаем по payload */
-      }
+    if (live.status !== "succeeded" && !live.paid) {
+      return Response.json({ ok: true });
+    }
+
+    if (live.amount?.value) {
+      amountRub = Math.round(parseFloat(live.amount.value));
     }
 
     if (!amountRub || amountRub <= 0) {
@@ -66,7 +68,7 @@ export async function POST(req: Request) {
 
     return Response.json({ ok: true });
   } catch {
-    // ЮKassa повторит, если не 200 — лучше 200 при сбое парсинга редких событий
-    return Response.json({ ok: true });
+    // ЮKassa повторит при 5xx; при битом JSON отвечаем 400
+    return Response.json({ error: "bad request" }, { status: 400 });
   }
 }

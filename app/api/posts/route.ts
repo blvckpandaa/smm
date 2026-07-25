@@ -1,8 +1,12 @@
 import type { BrandBrief, ContentPlan } from "@/lib/marketer/types";
 import { writePostsFromPlan } from "@/lib/smm/writer";
 import { isDeepSeekConfigured } from "@/lib/ai/client";
+import { requireSession } from "@/lib/auth/request";
 
 export async function POST(req: Request) {
+  const auth = await requireSession();
+  if (!auth.ok) return auth.response;
+
   try {
     const body = (await req.json()) as {
       brief?: BrandBrief;
