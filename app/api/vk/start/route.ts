@@ -1,25 +1,19 @@
 import { requireSession } from "@/lib/auth/request";
 import { getAppUrl } from "@/lib/meta/config";
-import {
-  getProjectForUser,
-  savePendingVkAuth,
-  savePendingVkUserFlow,
-} from "@/lib/store/projects";
+import { getProjectForUser } from "@/lib/store/projects";
 import {
   buildVkImplicitUserAuthUrl,
   getVkOAuthAppId,
   getVkRedirectUri,
+  hasDedicatedVkOAuthApp,
   resolveOAuthOrigin,
   useVkStub,
 } from "@/lib/vk/config";
+import { savePendingVkAuth, savePendingVkUserFlow } from "@/lib/store/projects";
 
 /**
- * Подключение VK без копирования из адресной строки:
- * oauth.vk.com → редирект на наш /api/vk/callback#access_token=…
- * HTML сам читает hash и сохраняет сессию.
- *
- * Нужно приложение типа «Веб-сайт» / Standalone с Redirect URI =
- * http://localhost:3000/api/vk/callback (и прод).
+ * OAuth только если явно задан VK_OAUTH_APP_ID (приложение «Веб-сайт»).
+ * Иначе возвращаем в кабинет — основной путь: ключ сообщества, без Security Error.
  */
 export async function GET(req: Request) {
   const auth = await requireSession();
@@ -32,14 +26,13 @@ export async function GET(req: Request) {
 
   if (!projectId) {
     return Response.redirect(
-      `${home}/plan?vk_error=${encodeURIComponent("Нет projectId")}`
+      `${home}/plan?vk_error=${encodeURIComponent("Нет projectId")}&step=channels`
     );
   }
 
-  const project = getProjectForUser(projectId, auth.session.userId);
-  if (!project) {
+  if (!getProjectForUser(projectId, auth.session.userId)) {
     return Response.redirect(
-      `${home}/plan?vk_error=${encodeURIComponent("Проект не найден")}`
+      `${home}/plan?vk_error=${encodeURIComponent("Проект не найден")}&step=channels`
     );
   }
 
@@ -56,18 +49,18 @@ export async function GET(req: Request) {
     );
   }
 
-  if (!getVkOAuthAppId()) {
+  // Без отдельного Website-приложения oauth.vk.com даёт Security Error на VK ID app
+  if (!hasDedicatedVkOAuthApp()) {
     return Response.redirect(
-      `${home}/plan?vk_error=${encodeURIComponent(
-        "Добавьте VK_APP_ID в .env"
-      )}&step=channels`
+      `${home}/plan?step=channels&vk_error=${encodeURIComponent(
+        "OAuth недоступен для текущего VK_APP_ID (Security Error). Подключите сообщество ключом API: ссылка + ключ из «Работа с API»."
+      )}`
     );
   }
 
-  const groupId = url.searchParams.get("groupId")?.trim()?.replace(/^-/, "");
-  if (groupId) {
+  if (!getVkOAuthAppId()) {
     return Response.redirect(
-      `${home}/api/vk/start-community?projectId=${encodeURIComponent(projectId)}&groupId=${encodeURIComponent(groupId)}`
+      `${home}/plan?step=channels&vk_error=${encodeURIComponent("Нет VK_OAUTH_APP_ID")}`
     );
   }
 

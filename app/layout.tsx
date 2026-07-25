@@ -18,9 +18,9 @@ const manrope = Manrope({
 const YANDEX_METRIKA_ID = 110895546;
 
 export const metadata: Metadata = {
-  title: "SMM-Agents — ИИ-агент для постов в соцсетях",
+  title: "SMM-Agents — посты, расписание и боты комментариев",
   description:
-    "Опишите бизнес — получите план и тексты для соцсетей. smm-agents.ru",
+    "ИИ-кабинет для Telegram и VK: план постов, публикация и автоответы в комментариях (FAQ или ИИ). smm-agents.ru",
   metadataBase: new URL("https://smm-agents.ru"),
 };
 

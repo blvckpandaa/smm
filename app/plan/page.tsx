@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BrandBrief, Channel, ContentPlan, PostGoal } from "@/lib/marketer";
 import type { PostDraft } from "@/lib/smm/types";
 import {
@@ -21,6 +21,7 @@ import {
 import { isValidWebsiteUrl, normalizeWebsiteUrl } from "@/lib/marketer/website";
 import { parseVkGroupId } from "@/lib/vk/parse-group-id";
 import styles from "./plan.module.css";
+import { BotsPanel, type PublicBot, type PublicBotReply } from "./BotsPanel";
 
 const CHANNELS: { id: Channel; label: string }[] = [
   { id: "telegram", label: "Telegram" },
@@ -46,7 +47,7 @@ const TIMEZONES = [
   "UTC",
 ];
 
-type Tab = "brief" | "plan" | "drafts" | "channels";
+type Tab = "brief" | "plan" | "drafts" | "channels" | "bots";
 
 function tabsFor(lang: UiLang): { key: Tab; label: string; short: string }[] {
   const t = dict[lang];
@@ -55,6 +56,7 @@ function tabsFor(lang: UiLang): { key: Tab; label: string; short: string }[] {
     { key: "plan", label: t.tabPlan, short: t.tabPlanShort },
     { key: "brief", label: t.tabBrief, short: t.tabBriefShort },
     { key: "channels", label: t.tabChannels, short: t.tabChannelsShort },
+    { key: "bots", label: t.tabBots, short: t.tabBotsShort },
   ];
 }
 
@@ -114,6 +116,11 @@ type PublicProject = {
     error?: string;
   } | null;
   channels: PublicChannels;
+  bots?: {
+    vk: PublicBot;
+    telegram: PublicBot;
+  };
+  botReplies?: PublicBotReply[];
 };
 
 function ChannelHelp({
@@ -172,21 +179,26 @@ const TELEGRAM_HELP = [
 ];
 
 const VK_HELP = [
-  "Нажмите «Подключить VK» — откроется вход ВКонтакте.",
-  "Разрешите доступ аккаунтом администратора сообщества.",
-  "Вас вернёт в кабинет — выберите сообщество. Копировать ссылку из адресной строки не нужно.",
-  "В настройках приложения VK укажите Redirect URI: http://localhost:3000/api/vk/callback",
+  "Нажмите «1. Открыть вход VK» — откроется новое окно.",
+  "Нажмите синюю кнопку «Kate Mobile», затем «Разрешить» (войдите как администратор сообщества).",
+  "После этого вверху окна появится длинная ссылка, которая начинается с oauth.vk.com — выделите её целиком и скопируйте (Ctrl+C).",
+  "Вернитесь сюда, вставьте ссылку в поле (Ctrl+V) и нажмите «Продолжить». Выберите своё сообщество из списка.",
+  "Если VK напишет предупреждение — не пугайтесь: вставляйте ссылку только в SMM-Agents, никуда больше.",
 ];
 
 const VK_HELP_EN = [
-  "Click “Connect VK” — VK login opens.",
-  "Allow access with a community admin account.",
-  "You’ll return to the cabinet — pick a community. No copying from the address bar.",
-  "In VK app settings set Redirect URI: http://localhost:3000/api/vk/callback",
+  "Click “1. Open VK login” — a new window opens.",
+  "Click the blue “Kate Mobile” button, then Allow (sign in as a community admin).",
+  "At the top of that window a long link starting with oauth.vk.com appears — select it all and copy (Ctrl+C).",
+  "Come back here, paste the link into the field (Ctrl+V) and click Continue. Pick your community from the list.",
+  "If VK shows a warning — that’s normal. Paste the link only into SMM-Agents, nowhere else.",
 ];
 
+/** Прямой OAuth Kate Mobile */
 const VK_KATE_AUTH_URL =
   "https://oauth.vk.com/authorize?client_id=2685278&display=page&redirect_uri=https%3A%2F%2Foauth.vk.com%2Fblank.html&scope=wall%2Cphotos%2Cgroups%2Coffline&response_type=token&v=5.199";
+
+const VK_HOST_URL = "https://vkhost.github.io/";
 
 function toggleChannel(list: Channel[], id: Channel): Channel[] {
   if (list.includes(id)) {
@@ -196,8 +208,22 @@ function toggleChannel(list: Channel[], id: Channel): Channel[] {
   return [...list, id];
 }
 
-function statusLabel(status: PostDraft["status"]): string {
-  const map: Record<PostDraft["status"], string> = {
+type PostsStatusFilter =
+  | "all"
+  | "attention"
+  | "today"
+  | "draft"
+  | "scheduled"
+  | "published"
+  | "failed";
+
+type PostsSort = "soon" | "latest" | "channel";
+
+function statusLabel(
+  status: PostDraft["status"],
+  lang: UiLang = "ru"
+): string {
+  const ru: Record<PostDraft["status"], string> = {
     draft: "черновик",
     pending_approval: "ждёт проверки",
     approved: "одобрен",
@@ -206,7 +232,157 @@ function statusLabel(status: PostDraft["status"]): string {
     published: "опубликован",
     failed: "ошибка",
   };
-  return map[status];
+  const en: Record<PostDraft["status"], string> = {
+    draft: "draft",
+    pending_approval: "pending",
+    approved: "approved",
+    scheduled: "scheduled",
+    rejected: "rejected",
+    published: "published",
+    failed: "failed",
+  };
+  return (lang === "en" ? en : ru)[status];
+}
+
+function channelLabel(channel: Channel): string {
+  return CHANNELS.find((c) => c.id === channel)?.label ?? channel;
+}
+
+function todayInZone(timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
+function addDaysIso(day: string, days: number): string {
+  const d = new Date(`${day}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function dayHeading(
+  day: string,
+  today: string,
+  weekday: string,
+  lang: UiLang
+): string {
+  if (day === today) return lang === "en" ? "Today" : "Сегодня";
+  if (day === addDaysIso(today, 1))
+    return lang === "en" ? "Tomorrow" : "Завтра";
+  if (day === addDaysIso(today, -1))
+    return lang === "en" ? "Yesterday" : "Вчера";
+  return `${weekday} · ${day.slice(5).replace("-", ".")}`;
+}
+
+function needsAttention(status: PostDraft["status"]): boolean {
+  return (
+    status === "failed" ||
+    status === "rejected" ||
+    status === "draft" ||
+    status === "pending_approval" ||
+    status === "approved"
+  );
+}
+
+function matchesStatusFilter(
+  draft: PostDraft,
+  filter: PostsStatusFilter,
+  today: string
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "attention") return needsAttention(draft.status);
+  if (filter === "today") return draft.day === today;
+  if (filter === "draft") {
+    return (
+      draft.status === "draft" ||
+      draft.status === "pending_approval" ||
+      draft.status === "approved"
+    );
+  }
+  if (filter === "failed") {
+    return draft.status === "failed" || draft.status === "rejected";
+  }
+  return draft.status === filter;
+}
+
+function mediaLabel(
+  draft: PostDraft,
+  t: (typeof dict)[UiLang]
+): string {
+  if (draft.imagePath || draft.videoPath) return t.postsMediaYes;
+  if (draft.needsPhoto || draft.needsVideo) return t.postsMediaNeed;
+  return t.postsMediaNo;
+}
+
+function canPublishChannel(channel: Channel): boolean {
+  return (
+    channel === "telegram" ||
+    channel === "vk" ||
+    channel === "facebook" ||
+    channel === "instagram" ||
+    channel === "threads" ||
+    channel === "x"
+  );
+}
+
+function nextPostAction(
+  draft: PostDraft,
+  lang: UiLang
+): {
+  kind: "fix" | "schedule" | "publish" | "done";
+  label: string;
+} {
+  if (draft.status === "published") {
+    return {
+      kind: "done",
+      label: lang === "en" ? "Published" : "Готово",
+    };
+  }
+  if (draft.status === "failed" || draft.status === "rejected") {
+    return {
+      kind: "fix",
+      label: lang === "en" ? "Fix & publish" : "Исправить",
+    };
+  }
+  if (draft.status === "scheduled") {
+    return {
+      kind: "publish",
+      label: lang === "en" ? "Publish now" : "Опубликовать",
+    };
+  }
+  return {
+    kind: "schedule",
+    label: lang === "en" ? "Schedule" : "В очередь",
+  };
+}
+
+function suggestPostsFilter(stats: {
+  failed: number;
+  draft: number;
+  scheduled: number;
+  today: number;
+}): PostsStatusFilter {
+  if (stats.failed > 0) return "failed";
+  if (stats.draft > 0) return "draft";
+  if (stats.today > 0) return "today";
+  if (stats.scheduled > 0) return "scheduled";
+  return "all";
+}
+
+function isChannelConnected(
+  channels: PublicChannels | undefined,
+  channel: Channel
+): boolean {
+  if (!channels) return false;
+  const entry = channels[channel as keyof PublicChannels];
+  return Boolean(entry && "connected" in entry && entry.connected);
 }
 
 /** Старые примеры из value → пусто, чтобы показать placeholder */
@@ -277,6 +453,13 @@ export default function PlanPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [mobileEdit, setMobileEdit] = useState(false);
+  const [postsChannelFilter, setPostsChannelFilter] = useState<
+    "all" | Channel
+  >("all");
+  const [postsStatusFilter, setPostsStatusFilter] =
+    useState<PostsStatusFilter>("all");
+  const [postsSearch, setPostsSearch] = useState("");
+  const [postsSort, setPostsSort] = useState<PostsSort>("soon");
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -302,6 +485,13 @@ export default function PlanPage() {
   const [uiLang, setUiLang] = useState<UiLang>("ru");
   const [balanceRub, setBalanceRub] = useState(0);
   const [postPriceRub, setPostPriceRub] = useState(50);
+  const [rewritePriceRub, setRewritePriceRub] = useState(25);
+  const [imagePriceRub, setImagePriceRub] = useState(25);
+  const [botVkPeriodRub, setBotVkPeriodRub] = useState(290);
+  const [botTgPeriodRub, setBotTgPeriodRub] = useState(290);
+  const [botFaqReplyRub, setBotFaqReplyRub] = useState(0);
+  const [botAiReplyRub, setBotAiReplyRub] = useState(2);
+  const [botPeriodDays, setBotPeriodDays] = useState(30);
   const [topupPresets, setTopupPresets] = useState<number[]>([
     100, 300, 500, 1000, 2000,
   ]);
@@ -330,6 +520,15 @@ export default function PlanPage() {
       const data = await res.json();
       setBalanceRub(Number(data.balanceRub) || 0);
       setPostPriceRub(Number(data.postPriceRub) || 50);
+      setRewritePriceRub(Number(data.rewritePriceRub) || 25);
+      setImagePriceRub(Number(data.imagePriceRub) || 25);
+      setBotVkPeriodRub(Number(data.botVkPeriodRub) || 290);
+      setBotTgPeriodRub(Number(data.botTgPeriodRub) || 290);
+      setBotFaqReplyRub(
+        typeof data.botFaqReplyRub === "number" ? data.botFaqReplyRub : 0
+      );
+      setBotAiReplyRub(Number(data.botAiReplyRub) || 2);
+      setBotPeriodDays(Number(data.botPeriodDays) || 30);
       if (Array.isArray(data.topupPresets)) setTopupPresets(data.topupPresets);
       setYookassaConfigured(Boolean(data.yookassaConfigured));
       setLedger(Array.isArray(data.ledger) ? data.ledger : []);
@@ -400,6 +599,157 @@ export default function PlanPage() {
       null
     );
   }, [project, selectedDraftId]);
+
+  const postsToday = useMemo(
+    () => todayInZone(brief?.timezone || project?.brief.timezone || "Europe/Moscow"),
+    [brief?.timezone, project?.brief.timezone]
+  );
+
+  const postsStats = useMemo(() => {
+    const drafts = project?.drafts ?? [];
+    const byChannel = new Map<Channel, number>();
+    for (const d of drafts) {
+      byChannel.set(d.channel, (byChannel.get(d.channel) ?? 0) + 1);
+    }
+    return {
+      total: drafts.length,
+      attention: drafts.filter((d) => needsAttention(d.status)).length,
+      today: drafts.filter((d) => d.day === postsToday).length,
+      draft: drafts.filter((d) =>
+        matchesStatusFilter(d, "draft", postsToday)
+      ).length,
+      scheduled: drafts.filter((d) => d.status === "scheduled").length,
+      published: drafts.filter((d) => d.status === "published").length,
+      failed: drafts.filter(
+        (d) => d.status === "failed" || d.status === "rejected"
+      ).length,
+      nextQueued:
+        drafts
+          .filter((d) => d.status === "scheduled")
+          .sort((a, b) =>
+            (a.scheduledAtIso || "").localeCompare(b.scheduledAtIso || "")
+          )[0] ?? null,
+      channels: [...byChannel.entries()].sort((a, b) => b[1] - a[1]),
+    };
+  }, [project?.drafts, postsToday]);
+
+  const postsFiltersActive =
+    postsChannelFilter !== "all" ||
+    postsStatusFilter !== "all" ||
+    postsSearch.trim().length > 0;
+
+  const filteredDrafts = useMemo(() => {
+    const drafts = project?.drafts ?? [];
+    const q = postsSearch.trim().toLowerCase();
+    let list = drafts.filter((d) => {
+      if (
+        postsChannelFilter !== "all" &&
+        d.channel !== postsChannelFilter
+      ) {
+        return false;
+      }
+      if (!matchesStatusFilter(d, postsStatusFilter, postsToday)) return false;
+      if (!q) return true;
+      const hay = `${d.title} ${d.topic} ${d.body} ${d.channel}`.toLowerCase();
+      return hay.includes(q);
+    });
+
+    list = [...list].sort((a, b) => {
+      if (postsSort === "channel") {
+        const c = a.channel.localeCompare(b.channel);
+        if (c !== 0) return c;
+        return (a.scheduledAtIso || "").localeCompare(b.scheduledAtIso || "");
+      }
+      if (postsSort === "latest") {
+        return (b.scheduledAtIso || "").localeCompare(a.scheduledAtIso || "");
+      }
+      const rank = (s: PostDraft["status"]) => {
+        if (s === "failed" || s === "rejected") return 0;
+        if (s === "draft" || s === "pending_approval" || s === "approved")
+          return 1;
+        if (s === "scheduled") return 2;
+        return 3;
+      };
+      const r = rank(a.status) - rank(b.status);
+      if (r !== 0) return r;
+      return (a.scheduledAtIso || "").localeCompare(b.scheduledAtIso || "");
+    });
+    return list;
+  }, [
+    project?.drafts,
+    postsChannelFilter,
+    postsStatusFilter,
+    postsSearch,
+    postsSort,
+    postsToday,
+  ]);
+
+  const filteredDraftGroups = useMemo(() => {
+    const groups: {
+      key: string;
+      label: string;
+      items: PostDraft[];
+    }[] = [];
+    if (postsSort === "channel") {
+      for (const draft of filteredDrafts) {
+        const key = draft.channel;
+        const last = groups[groups.length - 1];
+        if (last && last.key === key) last.items.push(draft);
+        else {
+          groups.push({
+            key,
+            label: channelLabel(draft.channel),
+            items: [draft],
+          });
+        }
+      }
+      return groups;
+    }
+    for (const draft of filteredDrafts) {
+      const key = draft.day;
+      const last = groups[groups.length - 1];
+      if (last && last.key === key) last.items.push(draft);
+      else {
+        groups.push({
+          key,
+          label: dayHeading(draft.day, postsToday, draft.weekday, uiLang),
+          items: [draft],
+        });
+      }
+    }
+    return groups;
+  }, [filteredDrafts, postsSort, postsToday, uiLang]);
+
+  useEffect(() => {
+    if (!filteredDrafts.length) return;
+    if (
+      selectedDraftId &&
+      filteredDrafts.some((d) => d.id === selectedDraftId)
+    ) {
+      return;
+    }
+    // Prefer failed / attention item when jumping into a filtered list
+    const prefer =
+      filteredDrafts.find(
+        (d) => d.status === "failed" || d.status === "rejected"
+      ) ?? filteredDrafts[0];
+    setSelectedDraftId(prefer.id);
+  }, [filteredDrafts, selectedDraftId]);
+
+  const postsFilterBootRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!projectId || !project?.drafts.length) return;
+    if (postsFilterBootRef.current === projectId) return;
+    postsFilterBootRef.current = projectId;
+    setPostsStatusFilter(
+      suggestPostsFilter({
+        failed: postsStats.failed,
+        draft: postsStats.draft,
+        scheduled: postsStats.scheduled,
+        today: postsStats.today,
+      })
+    );
+  }, [projectId, project?.drafts.length, postsStats]);
 
   const toneText = useMemo(
     () => (brief?.toneOfVoice ?? []).join(", "),
@@ -711,7 +1061,18 @@ export default function PlanPage() {
     const billing = params.get("billing");
     if (stepParam === "channels") setStep("channels");
     if (metaError) setError(decodeURIComponent(metaError));
-    if (vkError) setError(decodeURIComponent(vkError));
+    if (vkError) {
+      const decoded = decodeURIComponent(vkError);
+      if (/security error/i.test(decoded)) {
+        setError(
+          uiLang === "en"
+            ? "VK could not finish automatic login. Use the steps below: open VK login, allow access, paste the long link here."
+            : "Автоматический вход не сработал. Сделайте по шагам ниже: откройте вход VK, разрешите доступ, вставьте длинную ссылку сюда."
+        );
+      } else {
+        setError(decoded);
+      }
+    }
     const vkNotice = params.get("vk_notice");
     if (vkNotice) {
       setError(null);
@@ -965,6 +1326,15 @@ export default function PlanPage() {
 
   async function generateDraftImage(draftId: string) {
     if (!projectId) return;
+    if (balanceRub < imagePriceRub) {
+      setError(
+        uiLang === "en"
+          ? `Need ${imagePriceRub} ₽ for a new photo, balance ${balanceRub} ₽`
+          : `Нужно ${imagePriceRub} ₽ за фото, на балансе ${balanceRub} ₽`
+      );
+      setBillingOpen(true);
+      return;
+    }
     setBusyId(draftId);
     setError(null);
     try {
@@ -975,13 +1345,74 @@ export default function PlanPage() {
       });
       const data = await res.json();
       if (!res.ok) {
+        if (typeof data.balanceRub === "number") setBalanceRub(data.balanceRub);
+        if (res.status === 402) setBillingOpen(true);
         throw new Error(data.error || "Не удалось сгенерировать фото");
+      }
+      if (typeof data.billing?.balanceRub === "number") {
+        setBalanceRub(data.billing.balanceRub);
       }
       if (data.project) {
         setProjects((prev) =>
           prev.map((p) => (p.id === projectId ? data.project : p))
         );
       }
+      if (data.billing?.chargedRub) {
+        setNotice(
+          uiLang === "en"
+            ? `Charged ${data.billing.chargedRub} ₽ for photo`
+            : `Списано ${data.billing.chargedRub} ₽ за фото`
+        );
+      }
+      void refreshBilling();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function rewriteDraftText(draftId: string) {
+    if (!projectId) return;
+    if (balanceRub < rewritePriceRub) {
+      setError(
+        uiLang === "en"
+          ? `Need ${rewritePriceRub} ₽ to rewrite, balance ${balanceRub} ₽`
+          : `Нужно ${rewritePriceRub} ₽ за переписывание, на балансе ${balanceRub} ₽`
+      );
+      setBillingOpen(true);
+      return;
+    }
+    setBusyId(draftId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/drafts/rewrite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draftId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (typeof data.balanceRub === "number") setBalanceRub(data.balanceRub);
+        if (res.status === 402) setBillingOpen(true);
+        throw new Error(data.error || "Не удалось переписать текст");
+      }
+      if (typeof data.billing?.balanceRub === "number") {
+        setBalanceRub(data.billing.balanceRub);
+      }
+      if (data.project) {
+        setProjects((prev) =>
+          prev.map((p) => (p.id === projectId ? data.project : p))
+        );
+      }
+      if (data.billing?.chargedRub) {
+        setNotice(
+          uiLang === "en"
+            ? `Charged ${data.billing.chargedRub} ₽ for rewrite`
+            : `Списано ${data.billing.chargedRub} ₽ за переписывание`
+        );
+      }
+      void refreshBilling();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");
     } finally {
@@ -1255,14 +1686,18 @@ export default function PlanPage() {
     window.open(VK_KATE_AUTH_URL, "vk_oauth", "noopener,noreferrer,width=720,height=720");
     setNotice(
       uiLang === "en"
-        ? "Fallback only: after Allow, paste the FULL blank.html URL below. Prefer “Connect VK” above — it does not need copying."
-        : "Запасной способ: после «Разрешить» вставьте всю ссылку blank.html ниже. Лучше кнопка «Подключить VK» сверху — без копирования."
+        ? "In the new window click Allow. Then copy the long link at the top (starts with oauth.vk.com) and paste it below."
+        : "В новом окне нажмите «Разрешить». Затем скопируйте длинную ссылку сверху окна (начинается с oauth.vk.com) и вставьте сюда."
     );
   }
 
-  function startVkOAuth() {
-    if (!projectId) return;
-    window.location.href = `/api/vk/start?projectId=${encodeURIComponent(projectId)}`;
+  function openVkHost() {
+    window.open(VK_HOST_URL, "vk_host", "noopener,noreferrer,width=900,height=800");
+    setNotice(
+      uiLang === "en"
+        ? "In the new window: click Kate Mobile → Allow. Then copy the long link at the top and paste it below."
+        : "В новом окне: нажмите Kate Mobile → «Разрешить». Потом скопируйте длинную ссылку сверху и вставьте сюда."
+    );
   }
 
   async function connectVkGroup(groupId: number) {
@@ -1629,6 +2064,34 @@ export default function PlanPage() {
                       setProjectId(p.id);
                       localStorage.setItem(ACTIVE_KEY, p.id);
                       setSelectedDraftId(p.drafts[0]?.id ?? null);
+                      const today = todayInZone(
+                        p.brief.timezone || "Europe/Moscow"
+                      );
+                      const failed = p.drafts.filter(
+                        (d) =>
+                          d.status === "failed" || d.status === "rejected"
+                      ).length;
+                      const draftCount = p.drafts.filter((d) =>
+                        matchesStatusFilter(d, "draft", today)
+                      ).length;
+                      const scheduled = p.drafts.filter(
+                        (d) => d.status === "scheduled"
+                      ).length;
+                      const todayCount = p.drafts.filter(
+                        (d) => d.day === today
+                      ).length;
+                      setPostsStatusFilter(
+                        suggestPostsFilter({
+                          failed,
+                          draft: draftCount,
+                          scheduled,
+                          today: todayCount,
+                        })
+                      );
+                      setPostsChannelFilter("all");
+                      setPostsSearch("");
+                      setPostsSort("soon");
+                      setMobileEdit(false);
                       if (p.drafts.length) setStep("drafts");
                       else if (p.plan) setStep("plan");
                       else setStep("brief");
@@ -2256,39 +2719,36 @@ export default function PlanPage() {
                 <div className={styles.summary}>
                   <div>
                     <p className="eyebrow">
-                      Контент
-                      {project.draftsSource === "deepseek"
-                        ? " · ИИ"
-                        : project.drafts.length
-                          ? " · шаблон"
-                          : ""}
+                      {t.postsEyebrow}
+                      {project.drafts.length
+                        ? ` · ${project.drafts.length}`
+                        : ""}
                     </p>
-                    <h2>Лента публикаций</h2>
-                    <p>
-                      Маркетолог сам решает, нужно ли фото, и создаёт его при
-                      сборке. Выберите строку — справа правки.{" "}
-                      <button
-                        type="button"
-                        className={styles.linkBtn}
-                        onClick={() => setStep("channels")}
-                      >
-                        Каналы
-                      </button>
-                    </p>
+                    <h2>{t.postsTitle}</h2>
+                    <p className={styles.postsLeadTight}>{t.postsLead}</p>
                   </div>
                   <div className={styles.summaryActions}>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setStep("channels")}
+                    >
+                      {t.postsToChannels}
+                    </button>
                     {project.plan && (
                       <button
                         type="button"
-                        className="btn"
+                        className="btn btn-ghost"
                         disabled={pending}
                         onClick={generateDrafts}
                       >
                         {pending
-                          ? "Собираем…"
+                          ? uiLang === "en"
+                            ? "Building…"
+                            : "Собираем…"
                           : project.drafts.length
-                            ? "Пересобрать тексты"
-                            : "Собрать тексты"}
+                            ? t.postsRebuild
+                            : t.postsBuild}
                       </button>
                     )}
                   </div>
@@ -2299,18 +2759,28 @@ export default function PlanPage() {
                   <div className={styles.emptyDash}>
                     {!project.plan ? (
                       <>
-                        <p>Сначала нужен план на неделю.</p>
+                        <p>
+                          {uiLang === "en"
+                            ? "Build a weekly plan first."
+                            : "Сначала нужен план на неделю."}
+                        </p>
                         <button
                           type="button"
                           className="btn"
                           onClick={() => setStep("brief")}
                         >
-                          Открыть профиль бизнеса
+                          {uiLang === "en"
+                            ? "Open business profile"
+                            : "Открыть профиль бизнеса"}
                         </button>
                       </>
                     ) : (
                       <>
-                        <p>План есть — соберите тексты одним нажатием.</p>
+                        <p>
+                          {uiLang === "en"
+                            ? "Plan is ready — build texts in one click."
+                            : "План есть — соберите тексты одним нажатием."}
+                        </p>
                         <button
                           type="button"
                           className="btn"
@@ -2318,325 +2788,849 @@ export default function PlanPage() {
                           onClick={generateDrafts}
                         >
                           {pending
-                            ? "Пишем тексты и фото…"
-                            : "Собрать тексты и фото"}
+                            ? uiLang === "en"
+                              ? "Writing texts and photos…"
+                              : "Пишем тексты и фото…"
+                            : uiLang === "en"
+                              ? "Build texts and photos"
+                              : "Собрать тексты и фото"}
                         </button>
                       </>
                     )}
                   </div>
                 ) : (
-                  <div
-                    className={`${styles.contentGrid} ${
-                      mobileEdit ? styles.contentEditing : ""
-                    }`}
-                  >
-                    <div className={`${styles.tableWrap} ${styles.desktopOnly}`}>
-                      <table className={styles.contentTable}>
-                        <thead>
-                          <tr>
-                            <th>Когда</th>
-                            <th>Канал</th>
-                            <th>Тема</th>
-                            <th>Фото</th>
-                            <th>Статус</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {project.drafts.map((draft) => {
-                            const active =
-                              (selectedDraft?.id ?? null) === draft.id;
-                            return (
-                              <tr
-                                key={draft.id}
-                                className={
-                                  active ? styles.rowActive : undefined
-                                }
-                                onClick={() => setSelectedDraftId(draft.id)}
-                              >
-                                <td>
-                                  <div className={styles.cellMain}>
-                                    {draft.day}
-                                  </div>
-                                  <div className={styles.cellSub}>
-                                    {draft.timeLocal.slice(0, 5)} ·{" "}
-                                    {draft.weekday}
-                                  </div>
-                                </td>
-                                <td>{draft.channel}</td>
-                                <td>
-                                  <div className={styles.cellMain}>
-                                    {draft.title || draft.topic}
-                                  </div>
-                                  <div className={styles.cellSub}>
-                                    {draft.topic}
-                                  </div>
-                                </td>
-                                <td>
-                                  {draft.imagePath
-                                    ? "есть"
-                                    : draft.needsPhoto
-                                      ? "нужно"
-                                      : "нет"}
-                                </td>
-                                <td>
-                                  <span
-                                    className={styles.status}
-                                    data-status={draft.status}
-                                  >
-                                    {statusLabel(draft.status)}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className={`${styles.mobileList} ${styles.mobileOnly}`}>
-                      {project.drafts.map((draft) => {
-                        const active =
-                          (selectedDraft?.id ?? null) === draft.id;
-                        return (
+                  <>
+                    {(postsStats.failed > 0 ||
+                      postsStats.draft > 0 ||
+                      postsStats.nextQueued) && (
+                      <div className={styles.postsFocusBar}>
+                        {postsStats.failed > 0 ? (
                           <button
-                            key={draft.id}
                             type="button"
-                            className={
-                              active ? styles.mobileCardOn : styles.mobileCard
-                            }
+                            className={styles.postsFocusUrgent}
                             onClick={() => {
-                              setSelectedDraftId(draft.id);
-                              setMobileEdit(true);
+                              setPostsStatusFilter("failed");
+                              setPostsChannelFilter("all");
+                              setPostsSearch("");
                             }}
                           >
-                            <div className={styles.mobileCardTop}>
-                              <span>
-                                {draft.day.slice(5)} ·{" "}
-                                {draft.timeLocal.slice(0, 5)}
-                              </span>
-                              <span
-                                className={styles.status}
-                                data-status={draft.status}
-                              >
-                                {statusLabel(draft.status)}
-                              </span>
-                            </div>
-                            <strong className={styles.mobileCardTitle}>
-                              {draft.title || draft.topic}
+                            <strong>
+                              {postsStats.failed}{" "}
+                              {uiLang === "en" ? "failed" : "с ошибкой"}
                             </strong>
-                            <div className={styles.mobileCardMeta}>
-                              <span>{draft.channel}</span>
-                              <span>
-                                {draft.imagePath
-                                  ? "фото есть"
-                                  : draft.needsPhoto
-                                    ? "нужно фото"
-                                    : "без фото"}
-                              </span>
-                            </div>
+                            <span>{t.postsAttentionCta}</span>
                           </button>
-                        );
-                      })}
+                        ) : postsStats.draft > 0 ? (
+                          <button
+                            type="button"
+                            className={styles.postsFocusWarn}
+                            onClick={() => {
+                              setPostsStatusFilter("draft");
+                              setPostsChannelFilter("all");
+                              setPostsSearch("");
+                            }}
+                          >
+                            <strong>
+                              {postsStats.draft}{" "}
+                              {uiLang === "en"
+                                ? "drafts waiting"
+                                : "черновиков ждут"}
+                            </strong>
+                            <span>{t.postsAttentionCta}</span>
+                          </button>
+                        ) : null}
+                        {postsStats.nextQueued && (
+                          <button
+                            type="button"
+                            className={styles.postsFocusNext}
+                            onClick={() => {
+                              setPostsStatusFilter("scheduled");
+                              setPostsChannelFilter("all");
+                              setPostsSearch("");
+                              setSelectedDraftId(postsStats.nextQueued!.id);
+                            }}
+                          >
+                            <span className={styles.postsFocusLabel}>
+                              {t.postsNextUp}
+                            </span>
+                            <strong>
+                              {channelLabel(postsStats.nextQueued.channel)} ·{" "}
+                              {postsStats.nextQueued.day.slice(5)}{" "}
+                              {postsStats.nextQueued.timeLocal.slice(0, 5)}
+                            </strong>
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    <div className={styles.postsControlsSticky}>
+                      <div className={styles.postsStats}>
+                        {(
+                          [
+                            ["attention", t.postsFilterAttention, postsStats.attention],
+                            ["today", t.postsFilterToday, postsStats.today],
+                            ["draft", t.postsFilterDraft, postsStats.draft],
+                            ["scheduled", t.postsFilterQueue, postsStats.scheduled],
+                            ["published", t.postsFilterPublished, postsStats.published],
+                            ["failed", t.postsFilterFailed, postsStats.failed],
+                            ["all", t.postsFilterAll, postsStats.total],
+                          ] as const
+                        ).map(([id, label, count]) => (
+                          <button
+                            key={id}
+                            type="button"
+                            className={
+                              postsStatusFilter === id
+                                ? styles.postsStatOn
+                                : styles.postsStat
+                            }
+                            data-filter={id}
+                            onClick={() => setPostsStatusFilter(id)}
+                          >
+                            <strong>{count}</strong>
+                            <span>{label}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className={styles.postsToolbar}>
+                        <div className={styles.postsChannelFilters}>
+                          <button
+                            type="button"
+                            className={
+                              postsChannelFilter === "all"
+                                ? styles.chipOn
+                                : styles.chip
+                            }
+                            onClick={() => setPostsChannelFilter("all")}
+                          >
+                            {t.postsFilterAll}
+                          </button>
+                          {postsStats.channels.map(([ch, count]) => (
+                            <button
+                              key={ch}
+                              type="button"
+                              className={
+                                postsChannelFilter === ch
+                                  ? styles.chipOn
+                                  : styles.chip
+                              }
+                              onClick={() => setPostsChannelFilter(ch)}
+                            >
+                              <span
+                                className={styles.channelBadge}
+                                data-channel={ch}
+                              >
+                                {channelLabel(ch)}
+                              </span>
+                              <span className={styles.chipCount}>{count}</span>
+                            </button>
+                          ))}
+                        </div>
+                        <div className={styles.postsToolbarRight}>
+                          <div className={styles.postsSearchWrap}>
+                            <input
+                              className={styles.postsSearch}
+                              value={postsSearch}
+                              onChange={(e) => setPostsSearch(e.target.value)}
+                              placeholder={t.postsSearchPh}
+                              aria-label={t.postsSearchPh}
+                            />
+                            {postsSearch ? (
+                              <button
+                                type="button"
+                                className={styles.postsSearchClear}
+                                onClick={() => setPostsSearch("")}
+                                aria-label={t.postsClearSearch}
+                              >
+                                ×
+                              </button>
+                            ) : null}
+                          </div>
+                          <select
+                            className={styles.postsSort}
+                            value={postsSort}
+                            onChange={(e) =>
+                              setPostsSort(e.target.value as PostsSort)
+                            }
+                            aria-label={
+                              uiLang === "en" ? "Sort" : "Сортировка"
+                            }
+                          >
+                            <option value="soon">{t.postsSortSoon}</option>
+                            <option value="latest">{t.postsSortLatest}</option>
+                            <option value="channel">
+                              {t.postsSortChannel}
+                            </option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className={styles.postsMetaRow}>
+                        <span>
+                          {t.postsShowing}{" "}
+                          <strong>{filteredDrafts.length}</strong> {t.postsOf}{" "}
+                          {postsStats.total}
+                        </span>
+                        <span className={styles.postsHint}>{t.postsHintEdit}</span>
+                        {postsFiltersActive ? (
+                          <button
+                            type="button"
+                            className={styles.linkBtn}
+                            onClick={() => {
+                              setPostsChannelFilter("all");
+                              setPostsStatusFilter("all");
+                              setPostsSearch("");
+                            }}
+                          >
+                            {t.postsResetFilters}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
 
-                    {selectedDraft && (
-                      <aside
-                        className={`${styles.draftPanel} ${
-                          mobileEdit ? styles.draftPanelOpen : ""
+                    {!filteredDrafts.length ? (
+                      <div className={styles.emptyDash}>
+                        <p>{t.postsEmptyFilter}</p>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => {
+                            setPostsChannelFilter("all");
+                            setPostsStatusFilter("all");
+                            setPostsSearch("");
+                          }}
+                        >
+                          {t.postsResetFilters}
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        className={`${styles.contentGrid} ${
+                          mobileEdit ? styles.contentEditing : ""
                         }`}
                       >
-                        {(() => {
-                          const draft = selectedDraft;
-                          const canAutoPublish =
-                            draft.channel === "telegram" ||
-                            draft.channel === "vk" ||
-                            draft.channel === "facebook" ||
-                            draft.channel === "instagram" ||
-                            draft.channel === "threads" ||
-                            draft.channel === "x";
-                          const locked = draft.status === "published";
-                          return (
-                            <>
-                              <header className={styles.draftPanelHead}>
-                                <div>
-                                  <button
-                                    type="button"
-                                    className={`${styles.backMobile} ${styles.mobileOnly}`}
-                                    onClick={() => setMobileEdit(false)}
-                                  >
-                                    ← К списку
-                                  </button>
-                                  <p className="eyebrow">{draft.channel}</p>
-                                  <h3>{draft.topic}</h3>
-                                </div>
-                                <span
-                                  className={styles.status}
-                                  data-status={draft.status}
-                                >
-                                  {statusLabel(draft.status)}
-                                </span>
-                              </header>
+                        <div
+                          className={`${styles.tableWrap} ${styles.desktopOnly}`}
+                        >
+                          <table className={styles.contentTable}>
+                            <thead>
+                              <tr>
+                                <th>{t.postsColWhen}</th>
+                                <th>{t.postsColChannel}</th>
+                                <th>{t.postsColTopic}</th>
+                                <th>{t.postsColStatus}</th>
+                                <th>{t.postsColActions}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredDraftGroups.map((group) => (
+                                <Fragment key={group.key}>
+                                  <tr className={styles.dayGroupRow}>
+                                    <td colSpan={5}>
+                                      <div className={styles.dayGroupHead}>
+                                        <strong>{group.label}</strong>
+                                        <span>
+                                          {group.items.length}{" "}
+                                          {uiLang === "en" ? "posts" : "пост."}
+                                        </span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {group.items.map((draft) => {
+                                    const active =
+                                      (selectedDraft?.id ?? null) ===
+                                      draft.id;
+                                    const locked =
+                                      draft.status === "published";
+                                    const action = nextPostAction(
+                                      draft,
+                                      uiLang
+                                    );
+                                    const urgent =
+                                      draft.status === "failed" ||
+                                      draft.status === "rejected";
+                                    return (
+                                      <tr
+                                        key={draft.id}
+                                        className={[
+                                          active ? styles.rowActive : "",
+                                          urgent ? styles.rowUrgent : "",
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" ") || undefined}
+                                        onClick={() =>
+                                          setSelectedDraftId(draft.id)
+                                        }
+                                      >
+                                        <td>
+                                          <div className={styles.cellMain}>
+                                            {draft.timeLocal.slice(0, 5)}
+                                          </div>
+                                          <div className={styles.cellSub}>
+                                            {draft.day.slice(5)}
+                                          </div>
+                                        </td>
+                                        <td>
+                                          <span
+                                            className={styles.channelBadge}
+                                            data-channel={draft.channel}
+                                          >
+                                            {channelLabel(draft.channel)}
+                                          </span>
+                                          {!isChannelConnected(
+                                            project.channels,
+                                            draft.channel
+                                          ) &&
+                                          WORKING_CHANNELS.has(
+                                            draft.channel
+                                          ) ? (
+                                            <div
+                                              className={styles.cellWarn}
+                                            >
+                                              {t.postsChannelOff}
+                                            </div>
+                                          ) : null}
+                                        </td>
+                                        <td>
+                                          <div className={styles.cellMain}>
+                                            {draft.title || draft.topic}
+                                          </div>
+                                          <div className={styles.cellSub}>
+                                            {mediaLabel(draft, t)}
+                                            {" · "}
+                                            {draft.body.slice(0, 56)}
+                                            {draft.body.length > 56
+                                              ? "…"
+                                              : ""}
+                                          </div>
+                                        </td>
+                                        <td>
+                                          <span
+                                            className={styles.status}
+                                            data-status={draft.status}
+                                          >
+                                            {statusLabel(
+                                              draft.status,
+                                              uiLang
+                                            )}
+                                          </span>
+                                          {draft.publishError ? (
+                                            <div className={styles.cellWarn}>
+                                              {draft.publishError.slice(
+                                                0,
+                                                48
+                                              )}
+                                            </div>
+                                          ) : null}
+                                        </td>
+                                        <td
+                                          className={styles.rowActions}
+                                          onClick={(e) =>
+                                            e.stopPropagation()
+                                          }
+                                        >
+                                          {action.kind === "done" ? (
+                                            <span
+                                              className={styles.rowDone}
+                                            >
+                                              {action.label}
+                                            </span>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              className={
+                                                action.kind === "fix"
+                                                  ? styles.rowActionPrimaryUrgent
+                                                  : styles.rowActionPrimary
+                                              }
+                                              disabled={
+                                                locked ||
+                                                busyId === draft.id
+                                              }
+                                              onClick={() => {
+                                                setSelectedDraftId(draft.id);
+                                                if (action.kind === "fix") {
+                                                  void publishDraft(draft);
+                                                } else if (
+                                                  action.kind === "schedule"
+                                                ) {
+                                                  scheduleDraft(draft);
+                                                } else if (
+                                                  action.kind === "publish"
+                                                ) {
+                                                  void publishDraft(draft);
+                                                }
+                                              }}
+                                            >
+                                              {busyId === draft.id
+                                                ? "…"
+                                                : action.label}
+                                            </button>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </Fragment>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
 
-                              <label className={styles.field}>
-                                <span className={styles.fieldLabel}>Заголовок</span>
-                                <input
-                                  className={styles.fieldControl}
-                                  value={draft.title}
-                                  disabled={locked}
-                                  onChange={(e) =>
-                                    updateDraft(draft.id, {
-                                      title: e.target.value,
-                                    })
-                                  }
-                                />
-                              </label>
-                              <label className={styles.field}>
-                                <span className={styles.fieldLabel}>Текст</span>
-                                <textarea
-                                  className={styles.fieldControl}
-                                  rows={8}
-                                  value={draft.body}
-                                  disabled={locked}
-                                  onChange={(e) =>
-                                    updateDraft(draft.id, {
-                                      body: e.target.value,
-                                    })
-                                  }
-                                />
-                              </label>
-
-                              <div className={styles.scheduleRow}>
-                                <label className={styles.field}>
-                                  <span className={styles.fieldLabel}>Дата</span>
-                                  <input
-                                    className={styles.fieldControl}
-                                    type="date"
-                                    value={draft.day}
-                                    disabled={locked}
-                                    onChange={(e) =>
-                                      applySchedule(
-                                        draft,
-                                        e.target.value,
-                                        draft.timeLocal
-                                      )
-                                    }
-                                  />
-                                </label>
-                                <label className={styles.field}>
-                                  <span className={styles.fieldLabel}>Время</span>
-                                  <input
-                                    className={styles.fieldControl}
-                                    type="time"
-                                    value={draft.timeLocal.slice(0, 5)}
-                                    disabled={locked}
-                                    onChange={(e) =>
-                                      applySchedule(
-                                        draft,
-                                        draft.day,
-                                        e.target.value
-                                      )
-                                    }
-                                  />
-                                </label>
+                        <div
+                          className={`${styles.mobileList} ${styles.mobileOnly}`}
+                        >
+                          {filteredDraftGroups.map((group) => (
+                            <div
+                              key={group.key}
+                              className={styles.mobileGroup}
+                            >
+                              <div className={styles.dayGroupHead}>
+                                <strong>{group.label}</strong>
+                                <span>{group.items.length}</span>
                               </div>
-
-                              <div className={styles.imageBlock}>
-                                {draftImageSrc(draft) ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={draftImageSrc(draft)!}
-                                    alt=""
-                                    className={styles.draftImage}
-                                  />
-                                ) : (
-                                  <p className={styles.scheduleNote}>
-                                    {draft.channel === "threads"
-                                      ? "Threads: только текст, без фото"
-                                      : draft.channel === "instagram"
-                                        ? draft.imagePath
-                                          ? "Instagram: фото + текст в описании"
-                                          : "Instagram: нужно фото для публикации"
-                                        : draft.needsPhoto
-                                          ? "Маркетолог отметил фото — можно создать или пересобрать контент"
-                                          : "Фото не нужно"}
-                                  </p>
-                                )}
-                                {(draft.channel !== "threads" &&
-                                  (draft.needsPhoto || draft.imagePath)) && (
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost"
-                                    disabled={locked || busyId === draft.id}
-                                    onClick={() =>
-                                      generateDraftImage(draft.id)
+                              {group.items.map((draft) => {
+                                const active =
+                                  (selectedDraft?.id ?? null) === draft.id;
+                                const action = nextPostAction(
+                                  draft,
+                                  uiLang
+                                );
+                                return (
+                                  <div
+                                    key={draft.id}
+                                    className={
+                                      active
+                                        ? styles.mobileCardOn
+                                        : styles.mobileCard
                                     }
                                   >
-                                    {busyId === draft.id
-                                      ? "Генерируем…"
-                                      : draft.imagePath
-                                        ? "Новое фото"
-                                        : "Создать фото"}
-                                  </button>
-                                )}
-                                {draft.channel !== "threads" &&
-                                  draft.channel !== "instagram" && (
+                                    <button
+                                      type="button"
+                                      className={styles.mobileCardHit}
+                                      onClick={() => {
+                                        setSelectedDraftId(draft.id);
+                                        setMobileEdit(true);
+                                      }}
+                                    >
+                                      <div className={styles.mobileCardTop}>
+                                        <span>
+                                          {draft.timeLocal.slice(0, 5)} ·{" "}
+                                          {channelLabel(draft.channel)}
+                                        </span>
+                                        <span
+                                          className={styles.status}
+                                          data-status={draft.status}
+                                        >
+                                          {statusLabel(
+                                            draft.status,
+                                            uiLang
+                                          )}
+                                        </span>
+                                      </div>
+                                      <strong
+                                        className={styles.mobileCardTitle}
+                                      >
+                                        {draft.title || draft.topic}
+                                      </strong>
+                                    </button>
+                                    {action.kind !== "done" ? (
+                                      <button
+                                        type="button"
+                                        className={styles.mobilePrimary}
+                                        disabled={busyId === draft.id}
+                                        onClick={() => {
+                                          setSelectedDraftId(draft.id);
+                                          if (
+                                            action.kind === "fix" ||
+                                            action.kind === "publish"
+                                          ) {
+                                            void publishDraft(draft);
+                                          } else {
+                                            scheduleDraft(draft);
+                                          }
+                                        }}
+                                      >
+                                        {busyId === draft.id
+                                          ? "…"
+                                          : action.label}
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+
+                        {selectedDraft && (
+                          <aside
+                            className={`${styles.draftPanel} ${
+                              mobileEdit ? styles.draftPanelOpen : ""
+                            }`}
+                          >
+                            {(() => {
+                              const draft = selectedDraft;
+                              const canAutoPublish = canPublishChannel(
+                                draft.channel
+                              );
+                              const locked = draft.status === "published";
+                              const connected = isChannelConnected(
+                                project.channels,
+                                draft.channel
+                              );
+                              const action = nextPostAction(draft, uiLang);
+                              return (
+                                <>
+                                  <header className={styles.draftPanelHead}>
+                                    <div>
+                                      <button
+                                        type="button"
+                                        className={`${styles.backMobile} ${styles.mobileOnly}`}
+                                        onClick={() => setMobileEdit(false)}
+                                      >
+                                        {t.postsBackList}
+                                      </button>
+                                      <p className="eyebrow">
+                                        {channelLabel(draft.channel)} ·{" "}
+                                        {draft.timeLocal.slice(0, 5)}
+                                      </p>
+                                      <h3>{draft.topic}</h3>
+                                    </div>
+                                    <span
+                                      className={styles.status}
+                                      data-status={draft.status}
+                                    >
+                                      {statusLabel(draft.status, uiLang)}
+                                    </span>
+                                  </header>
+
+                                  {!connected &&
+                                    WORKING_CHANNELS.has(draft.channel) && (
+                                      <div className={styles.channelOffNote}>
+                                        <span>{t.postsChannelOff}</span>
+                                        <button
+                                          type="button"
+                                          className={styles.linkBtn}
+                                          onClick={() => setStep("channels")}
+                                        >
+                                          {t.postsChannelOffCta}
+                                        </button>
+                                      </div>
+                                    )}
+
+                                  <label className={styles.field}>
+                                    <span className={styles.fieldLabel}>
+                                      {uiLang === "en" ? "Channel" : "Куда"}
+                                    </span>
+                                    <select
+                                      className={styles.fieldControl}
+                                      value={draft.channel}
+                                      disabled={locked}
+                                      onChange={(e) =>
+                                        updateDraft(draft.id, {
+                                          channel: e.target
+                                            .value as Channel,
+                                          status:
+                                            draft.status === "published"
+                                              ? draft.status
+                                              : "draft",
+                                          publishError: undefined,
+                                        })
+                                      }
+                                    >
+                                      {CHANNELS.map((ch) => (
+                                        <option key={ch.id} value={ch.id}>
+                                          {ch.label}
+                                          {!WORKING_CHANNELS.has(ch.id)
+                                            ? ` (${t.soon})`
+                                            : ""}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+
+                                  <label className={styles.field}>
+                                    <span className={styles.fieldLabel}>
+                                      {uiLang === "en" ? "Title" : "Заголовок"}
+                                    </span>
+                                    <input
+                                      className={styles.fieldControl}
+                                      value={draft.title}
+                                      disabled={locked}
+                                      onChange={(e) =>
+                                        updateDraft(draft.id, {
+                                          title: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label className={styles.field}>
+                                    <span className={styles.fieldLabel}>
+                                      {uiLang === "en" ? "Text" : "Текст"}
+                                    </span>
+                                    <textarea
+                                      className={styles.fieldControl}
+                                      rows={8}
+                                      value={draft.body}
+                                      disabled={locked}
+                                      onChange={(e) =>
+                                        updateDraft(draft.id, {
+                                          body: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  {!locked && (
                                     <button
                                       type="button"
                                       className="btn btn-ghost"
-                                      disabled={locked || busyId === draft.id}
+                                      disabled={busyId === draft.id}
                                       onClick={() =>
-                                        generateDraftVideo(draft.id)
+                                        rewriteDraftText(draft.id)
                                       }
                                     >
                                       {busyId === draft.id
-                                        ? "Генерируем…"
-                                        : draft.videoPath
-                                          ? "Новое видео"
-                                          : "Сгенерировать видео"}
+                                        ? uiLang === "en"
+                                          ? "Rewriting…"
+                                          : "Переписываем…"
+                                        : uiLang === "en"
+                                          ? `Rewrite text · ${rewritePriceRub} ₽`
+                                          : `Переписать текст · ${rewritePriceRub} ₽`}
                                     </button>
                                   )}
-                                {draft.videoPath && (
-                                  <p className={styles.scheduleNote}>
-                                    Видео готово — уйдёт в X / TG / VK при
-                                    публикации, если канал поддерживает.
-                                  </p>
-                                )}
-                              </div>
 
-                              {draft.publishError && (
-                                <p className={styles.error}>
-                                  {draft.publishError}
-                                </p>
-                              )}
+                                  <div className={styles.scheduleRow}>
+                                    <label className={styles.field}>
+                                      <span className={styles.fieldLabel}>
+                                        {uiLang === "en" ? "Date" : "Дата"}
+                                      </span>
+                                      <input
+                                        className={styles.fieldControl}
+                                        type="date"
+                                        value={draft.day}
+                                        disabled={locked}
+                                        onChange={(e) =>
+                                          applySchedule(
+                                            draft,
+                                            e.target.value,
+                                            draft.timeLocal
+                                          )
+                                        }
+                                      />
+                                    </label>
+                                    <label className={styles.field}>
+                                      <span className={styles.fieldLabel}>
+                                        {uiLang === "en" ? "Time" : "Время"}
+                                      </span>
+                                      <input
+                                        className={styles.fieldControl}
+                                        type="time"
+                                        value={draft.timeLocal.slice(0, 5)}
+                                        disabled={locked}
+                                        onChange={(e) =>
+                                          applySchedule(
+                                            draft,
+                                            draft.day,
+                                            e.target.value
+                                          )
+                                        }
+                                      />
+                                    </label>
+                                  </div>
 
-                              <div className={styles.draftActionsSticky}>
-                                <button
-                                  type="button"
-                                  className="btn"
-                                  disabled={locked}
-                                  onClick={() => scheduleDraft(draft)}
-                                >
-                                  {draft.status === "scheduled"
-                                    ? "В расписании"
-                                    : "Запланировать"}
-                                </button>
-                                {canAutoPublish && (
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost"
-                                    disabled={busyId === draft.id || locked}
-                                    onClick={() => publishDraft(draft)}
-                                  >
-                                    Сейчас
-                                  </button>
-                                )}
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </aside>
+                                  <div className={styles.imageBlock}>
+                                    {draftImageSrc(draft) ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        src={draftImageSrc(draft)!}
+                                        alt=""
+                                        className={styles.draftImage}
+                                      />
+                                    ) : (
+                                      <p className={styles.scheduleNote}>
+                                        {draft.channel === "threads"
+                                          ? "Threads: text only"
+                                          : draft.channel === "instagram"
+                                            ? draft.imagePath
+                                              ? "Instagram: photo + caption"
+                                              : uiLang === "en"
+                                                ? "Instagram needs a photo"
+                                                : "Instagram: нужно фото"
+                                            : draft.needsPhoto
+                                              ? uiLang === "en"
+                                                ? "Photo marked — create below"
+                                                : "Нужно фото — создайте ниже"
+                                              : uiLang === "en"
+                                                ? "No photo needed"
+                                                : "Фото не нужно"}
+                                      </p>
+                                    )}
+                                    {draft.channel !== "threads" &&
+                                      (draft.needsPhoto ||
+                                        draft.imagePath) && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost"
+                                          disabled={
+                                            locked || busyId === draft.id
+                                          }
+                                          onClick={() =>
+                                            generateDraftImage(draft.id)
+                                          }
+                                        >
+                                          {busyId === draft.id
+                                            ? "…"
+                                            : draft.imagePath
+                                              ? uiLang === "en"
+                                                ? `New photo · ${imagePriceRub} ₽`
+                                                : `Новое фото · ${imagePriceRub} ₽`
+                                              : uiLang === "en"
+                                                ? `Create photo · ${imagePriceRub} ₽`
+                                                : `Создать фото · ${imagePriceRub} ₽`}
+                                        </button>
+                                      )}
+                                    {draft.channel !== "threads" &&
+                                      draft.channel !== "instagram" &&
+                                      !draft.needsPhoto &&
+                                      !draft.imagePath && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost"
+                                          disabled={
+                                            locked || busyId === draft.id
+                                          }
+                                          onClick={() =>
+                                            generateDraftImage(draft.id)
+                                          }
+                                        >
+                                          {busyId === draft.id
+                                            ? "…"
+                                            : uiLang === "en"
+                                              ? `Create photo · ${imagePriceRub} ₽`
+                                              : `Создать фото · ${imagePriceRub} ₽`}
+                                        </button>
+                                      )}
+                                    {draft.channel !== "threads" &&
+                                      draft.channel !== "instagram" && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost"
+                                          disabled={
+                                            locked || busyId === draft.id
+                                          }
+                                          onClick={() =>
+                                            generateDraftVideo(draft.id)
+                                          }
+                                        >
+                                          {busyId === draft.id
+                                            ? "…"
+                                            : draft.videoPath
+                                              ? uiLang === "en"
+                                                ? "New video"
+                                                : "Новое видео"
+                                              : uiLang === "en"
+                                                ? "Generate video"
+                                                : "Сгенерировать видео"}
+                                        </button>
+                                      )}
+                                  </div>
+
+                                  {draft.publishError && (
+                                    <p className={styles.error}>
+                                      {draft.publishError}
+                                    </p>
+                                  )}
+
+                                  <div className={styles.draftActionsSticky}>
+                                    {action.kind !== "done" && (
+                                      <button
+                                        type="button"
+                                        className="btn"
+                                        disabled={
+                                          locked || busyId === draft.id
+                                        }
+                                        onClick={() => {
+                                          if (
+                                            action.kind === "fix" ||
+                                            action.kind === "publish"
+                                          ) {
+                                            void publishDraft(draft);
+                                          } else {
+                                            scheduleDraft(draft);
+                                          }
+                                        }}
+                                      >
+                                        {busyId === draft.id
+                                          ? "…"
+                                          : action.label}
+                                      </button>
+                                    )}
+                                    {!locked &&
+                                      draft.status !== "draft" && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost"
+                                          onClick={() =>
+                                            updateDraft(draft.id, {
+                                              status: "draft",
+                                              publishError: undefined,
+                                            })
+                                          }
+                                        >
+                                          {t.postsToDraft}
+                                        </button>
+                                      )}
+                                    {!locked &&
+                                      action.kind === "schedule" &&
+                                      canAutoPublish && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost"
+                                          disabled={busyId === draft.id}
+                                          onClick={() =>
+                                            publishDraft(draft)
+                                          }
+                                        >
+                                          {t.postsPublishNow}
+                                        </button>
+                                      )}
+                                    {!locked &&
+                                      draft.status === "scheduled" && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost"
+                                          onClick={() =>
+                                            scheduleDraft(draft)
+                                          }
+                                        >
+                                          {t.postsInSchedule}
+                                        </button>
+                                      )}
+                                    {!locked &&
+                                      draft.status !== "rejected" && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost"
+                                          onClick={() =>
+                                            updateDraft(draft.id, {
+                                              status: "rejected",
+                                            })
+                                          }
+                                        >
+                                          {t.postsReject}
+                                        </button>
+                                      )}
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </aside>
+                        )}
+                      </div>
                     )}
-                  </div>
+                  </>
                 )}
               </section>
             )}
@@ -2745,26 +3739,31 @@ export default function PlanPage() {
                             <summary className={styles.fieldHint}>
                               {uiLang === "en"
                                 ? "Reconnect / change community"
-                                : "Переподключить / сменить сообщество"}
+                                : "Подключить другое сообщество"}
                             </summary>
+                            <p className={styles.fieldHint}>
+                              {uiLang === "en"
+                                ? "Open VK login, click Allow, then paste the long link from the top of that window here."
+                                : "Откройте вход VK, нажмите «Разрешить», затем вставьте сюда длинную ссылку из верхней части того окна."}
+                            </p>
                             <button
                               type="button"
                               className="btn btn-ghost"
                               disabled={pending}
-                              onClick={openVkLogin}
+                              onClick={openVkHost}
                             >
                               {uiLang === "en"
-                                ? "Sign in with VK again"
-                                : "Войти через VK снова"}
+                                ? "Open VK login again"
+                                : "Снова открыть вход VK"}
                             </button>
                             <label className={styles.full}>
                               {uiLang === "en"
-                                ? "Paste URL from VK window"
-                                : "Вставьте ссылку из окна VK"}
+                                ? "Paste the long link here"
+                                : "Вставьте длинную ссылку сюда"}
                               <input
                                 value={vkToken}
                                 onChange={(e) => setVkToken(e.target.value)}
-                                placeholder="https://oauth.vk.com/blank.html#access_token=..."
+                                placeholder="https://oauth.vk.com/..."
                                 autoComplete="off"
                               />
                             </label>
@@ -2790,116 +3789,96 @@ export default function PlanPage() {
                       <div className={styles.form}>
                         <div className={`${styles.full} ${styles.billingHint}`}>
                           {uiLang === "en"
-                            ? "One click: sign in to VK and pick a community. No copying from the address bar."
-                            : "Один клик: войдите в VK и выберите сообщество. Без копирования из адресной строки."}
+                            ? "To post to VK we need your permission once. It takes about a minute — follow the three steps."
+                            : "Чтобы публиковать во ВКонтакте, один раз нужно разрешение. Это займёт около минуты — три простых шага."}
                         </div>
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={pending || vkPickLoading}
-                          onClick={startVkOAuth}
-                        >
-                          {t.connectVk}
-                        </button>
-                        <p className={styles.fieldHint}>
-                          {uiLang === "en"
-                            ? "VK app Redirect URI must be: http://localhost:3000/api/vk/callback"
-                            : "В приложении VK в Redirect URI должно быть: http://localhost:3000/api/vk/callback"}
-                        </p>
 
-                        <details className={styles.full}>
-                          <summary className={styles.fieldHint}>
+                        <ol className={styles.helpList}>
+                          <li>
                             {uiLang === "en"
-                              ? "Or connect with community link + token"
-                              : "Или подключить ссылкой на сообщество + токен"}
-                          </summary>
-                          <label className={styles.full}>
+                              ? "Open the VK window and click Allow (use the account that manages your community)."
+                              : "Откройте окно VK и нажмите «Разрешить» (аккаунт, которым вы управляете сообществом)."}
+                          </li>
+                          <li>
                             {uiLang === "en"
-                              ? "Community link or ID"
-                              : "Ссылка или ID сообщества"}
-                            <input
-                              value={vkGroupId}
-                              onChange={(e) => setVkGroupId(e.target.value)}
-                              placeholder="vk.com/club123456"
-                              autoComplete="off"
-                            />
-                          </label>
-                          <label className={styles.full}>
+                              ? "Copy the long link at the top of that window (it starts with oauth.vk.com)."
+                              : "Скопируйте длинную ссылку сверху того окна (она начинается с oauth.vk.com)."}
+                          </li>
+                          <li>
                             {uiLang === "en"
-                              ? "Access token"
-                              : "Токен доступа"}
-                            <input
-                              value={vkToken}
-                              onChange={(e) => setVkToken(e.target.value)}
-                              placeholder="vk1.a...."
-                              autoComplete="off"
-                            />
-                          </label>
+                              ? "Paste it into the field below and choose your community."
+                              : "Вставьте её в поле ниже и выберите своё сообщество."}
+                          </li>
+                        </ol>
+
+                        <div className={styles.channelActions}>
                           <button
                             type="button"
                             className="btn"
-                            disabled={
-                              pending ||
-                              (!vkToken.trim() && !vkGroupId.trim())
-                            }
-                            onClick={() => void connectVkAny()}
+                            disabled={pending || vkPickLoading}
+                            onClick={openVkHost}
                           >
-                            {pending
-                              ? uiLang === "en"
-                                ? "Connecting…"
-                                : "Подключаем…"
-                              : uiLang === "en"
-                                ? "Connect and verify"
-                                : "Подключить и проверить"}
-                          </button>
-                        </details>
-
-                        <details className={styles.full}>
-                          <summary className={styles.fieldHint}>
                             {uiLang === "en"
-                              ? "Last resort: paste blank.html URL (VK will show a warning)"
-                              : "Крайний случай: вставить ссылку blank.html (VK покажет предупреждение)"}
-                          </summary>
+                              ? "1. Open VK login"
+                              : "1. Открыть вход VK"}
+                          </button>
                           <button
                             type="button"
                             className="btn btn-ghost"
-                            disabled={pending}
+                            disabled={pending || vkPickLoading}
                             onClick={openVkLogin}
                           >
                             {uiLang === "en"
-                              ? "Open VK login window"
-                              : "Открыть окно входа VK"}
+                              ? "Another window"
+                              : "Другое окно входа"}
                           </button>
-                          <label className={styles.full}>
-                            {uiLang === "en"
-                              ? "Paste URL from VK window"
-                              : "Вставьте ссылку из окна VK"}
-                            <input
-                              value={vkToken}
-                              onChange={(e) => setVkToken(e.target.value)}
-                              onPaste={(e) => {
-                                const text = e.clipboardData.getData("text");
-                                if (/access_token=/i.test(text)) {
-                                  e.preventDefault();
-                                  setVkToken(text.trim());
-                                  void connectVkAny(text.trim());
-                                }
-                              }}
-                              placeholder="https://oauth.vk.com/blank.html#access_token=..."
-                              autoComplete="off"
-                            />
-                          </label>
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            disabled={
-                              pending || vkPickLoading || !vkToken.trim()
+                        </div>
+
+                        <label className={styles.full}>
+                          {uiLang === "en"
+                            ? "2. Paste the long link here"
+                            : "2. Вставьте длинную ссылку сюда"}
+                          <input
+                            value={vkToken}
+                            onChange={(e) => setVkToken(e.target.value)}
+                            onPaste={(e) => {
+                              const text = e.clipboardData.getData("text");
+                              if (/access_token=/i.test(text)) {
+                                e.preventDefault();
+                                setVkToken(text.trim());
+                                void connectVkAny(text.trim());
+                              }
+                            }}
+                            placeholder={
+                              uiLang === "en"
+                                ? "Paste here (Ctrl+V) — link starts with https://oauth.vk.com/..."
+                                : "Вставьте сюда (Ctrl+V) — ссылка начинается с https://oauth.vk.com/..."
                             }
-                            onClick={() => void connectVkAny()}
-                          >
-                            {uiLang === "en" ? "Continue" : "Продолжить"}
-                          </button>
-                        </details>
+                            autoComplete="off"
+                          />
+                          <span className={styles.fieldHint}>
+                            {uiLang === "en"
+                              ? "If VK warns you not to share the link with strangers — paste it only into this field in SMM-Agents. That’s safe."
+                              : "Если VK предупредит «не передавайте ссылку посторонним» — вставьте её только в это поле в SMM-Agents. Так безопасно."}
+                          </span>
+                        </label>
+
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={
+                            pending || vkPickLoading || !vkToken.trim()
+                          }
+                          onClick={() => void connectVkAny()}
+                        >
+                          {vkPickLoading
+                            ? uiLang === "en"
+                              ? "Loading your communities…"
+                              : "Загружаем ваши сообщества…"
+                            : uiLang === "en"
+                              ? "3. Continue — choose community"
+                              : "3. Продолжить — выбрать сообщество"}
+                        </button>
                       </div>
                     )}
                   </article>
@@ -2928,6 +3907,64 @@ export default function PlanPage() {
                 </div>
                 {error && <p className={styles.error}>{error}</p>}
               </section>
+            )}
+
+            {step === "bots" && project && (
+              <BotsPanel
+                uiLang={uiLang}
+                projectId={project.id}
+                vkConnected={Boolean(project.channels.vk.connected)}
+                telegramConnected={Boolean(project.channels.telegram.connected)}
+                bots={{
+                  vk: project.bots?.vk ?? {
+                    enabled: false,
+                    mode: "faq",
+                    paidUntil: null,
+                    faq: [],
+                    hasVkCallback: false,
+                    paidActive: false,
+                    lastWebhookAt: null,
+                    lastWebhookType: null,
+                    lastWebhookNote: null,
+                  },
+                  telegram: project.bots?.telegram ?? {
+                    enabled: false,
+                    mode: "faq",
+                    paidUntil: null,
+                    faq: [],
+                    hasVkCallback: false,
+                    paidActive: false,
+                    lastWebhookAt: null,
+                    lastWebhookType: null,
+                    lastWebhookNote: null,
+                  },
+                }}
+                botReplies={project.botReplies ?? []}
+                prices={{
+                  botVkPeriodRub,
+                  botTgPeriodRub,
+                  botFaqReplyRub,
+                  botAiReplyRub,
+                  botPeriodDays,
+                }}
+                pending={pending}
+                balanceRub={balanceRub}
+                onBusy={setPending}
+                onError={setError}
+                onNotice={setNotice}
+                onNeedBilling={() => setBillingOpen(true)}
+                onGoChannels={() => setStep("channels")}
+                onProject={(p) => {
+                  const proj = p as PublicProject;
+                  setProjects((prev) =>
+                    prev.map((x) => (x.id === proj.id ? { ...x, ...proj } : x))
+                  );
+                  if (typeof (p as { billing?: { balanceRub?: number } }).billing?.balanceRub === "number") {
+                    /* no-op */
+                  }
+                  void refreshBilling();
+                }}
+              />
             )}
           </div>
 
@@ -2958,16 +3995,18 @@ export default function PlanPage() {
             >
               <div className={styles.modalCard}>
                 <h2 id="vk-pick-title">
-                  {uiLang === "en" ? "Choose VK community" : "Выберите сообщество VK"}
+                  {uiLang === "en"
+                    ? "Where should we post?"
+                    : "Куда публиковать посты?"}
                 </h2>
                 <p>
                   {vkStubMode
                     ? uiLang === "en"
-                      ? "Demo communities (VK keys not configured)."
-                      : "Тестовые сообщества (ключи VK не настроены)."
+                      ? "Demo mode — pick a test community."
+                      : "Тестовый режим — выберите пробное сообщество."
                     : uiLang === "en"
-                      ? "Pick where posts should be published."
-                      : "Куда публиковать посты на стену."}
+                      ? "Tap your community. Posts will go to its wall."
+                      : "Нажмите на своё сообщество. Посты будут выходить на его стену."}
                 </p>
                 {vkPickLoading ? (
                   <p>{uiLang === "en" ? "Loading…" : "Загружаем…"}</p>
@@ -3099,8 +4138,8 @@ export default function PlanPage() {
                 </div>
                 <p className={styles.modalHint}>
                   {uiLang === "en"
-                    ? `${postPriceRub} ₽ per post — charged before the marketer builds the weekly plan.`
-                    : `${postPriceRub} ₽ за пост — списываем перед тем, как маркетолог составит план на неделю.`}
+                    ? `${postPriceRub} ₽ per post. Rewrite — ${rewritePriceRub} ₽. Photo — ${imagePriceRub} ₽. Comment bots: ${botVkPeriodRub} ₽ / ${botPeriodDays} days; FAQ free; AI ${botAiReplyRub} ₽/reply.`
+                    : `${postPriceRub} ₽ за пост. Переписать — ${rewritePriceRub} ₽. Фото — ${imagePriceRub} ₽. Боты комментов: ${botVkPeriodRub} ₽ / ${botPeriodDays} дн.; FAQ бесплатно; ИИ ${botAiReplyRub} ₽/ответ.`}
                 </p>
                 {!yookassaConfigured && (
                   <p className={styles.stubBanner}>

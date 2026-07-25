@@ -101,37 +101,49 @@ export async function exchangeVkCode(
 }
 
 export async function listVkAdminGroups(accessToken: string): Promise<VkGroup[]> {
-  const params = new URLSearchParams({
-    extended: "1",
-    filter: "admin",
-    fields: "name,screen_name,photo_50",
-    access_token: accessToken,
-    v: "5.199",
-  });
-  const res = await fetch(`https://api.vk.com/method/groups.get?${params}`);
-  const data = (await res.json()) as {
-    response?: {
-      items?: {
-        id: number;
-        name: string;
-        screen_name?: string;
-        photo_50?: string;
-      }[];
+  const filters = ["admin", "editor", "moder"] as const;
+  const byId = new Map<number, VkGroup>();
+
+  for (const filter of filters) {
+    const params = new URLSearchParams({
+      extended: "1",
+      filter,
+      fields: "name,screen_name,photo_50",
+      count: "1000",
+      access_token: accessToken,
+      v: "5.199",
+    });
+    const res = await fetch(`https://api.vk.com/method/groups.get?${params}`);
+    const data = (await res.json()) as {
+      response?: {
+        items?: {
+          id: number;
+          name: string;
+          screen_name?: string;
+          photo_50?: string;
+        }[];
+      };
+      error?: { error_msg?: string; error_code?: number };
     };
-    error?: { error_msg?: string; error_code?: number };
-  };
-  if (data.error) {
-    throw new Error(
-      data.error.error_msg ||
-        "Не удалось получить список сообществ. Укажите токен сообщества вручную."
-    );
+    if (data.error && filter === "admin") {
+      throw new Error(
+        data.error.error_msg ||
+          "Не удалось получить список сообществ. Получите новый токен через Kate Mobile."
+      );
+    }
+    for (const g of data.response?.items ?? []) {
+      if (!byId.has(g.id)) {
+        byId.set(g.id, {
+          id: g.id,
+          name: g.name,
+          screenName: g.screen_name,
+          photo50: g.photo_50,
+        });
+      }
+    }
   }
-  return (data.response?.items ?? []).map((g) => ({
-    id: g.id,
-    name: g.name,
-    screenName: g.screen_name,
-    photo50: g.photo_50,
-  }));
+
+  return [...byId.values()];
 }
 
 /** Проверка: личный токен может вызвать photos.getWallUploadServer для группы. */
@@ -158,7 +170,7 @@ export async function verifyVkUserPhotoAccess(input: {
 }
 
 const VK_USER_TOKEN_HINT =
-  "Нужен личный токен администратора: откройте https://vkhost.github.io/ → Kate Mobile → разрешите доступ → скопируйте access_token из адресной строки. Ключ из «Работа с API» сообщества для публикации на стену больше не подходит.";
+  "Нужно разрешение от VK: нажмите «Открыть вход VK» → «Разрешить» → скопируйте длинную ссылку сверху того окна (начинается с oauth.vk.com) и вставьте сюда. Ключ из настроек сообщества для стены не подходит.";
 
 type VkApiError = { error_msg?: string; error_code?: number };
 
@@ -199,7 +211,10 @@ async function resolveGroupId(
   raw: string
 ): Promise<string> {
   let groupId = raw.replace(/^-/, "").trim();
-  if (!groupId || /^\d+$/.test(groupId)) return groupId;
+  if (!groupId || /access_token=|blank\.html|oauth\.vk/i.test(groupId)) {
+    return "";
+  }
+  if (/^\d+$/.test(groupId)) return groupId;
 
   const data = await vkMethod<{ type?: string; object_id?: number }>(
     "utils.resolveScreenName",
@@ -344,7 +359,7 @@ export async function verifyVkPublishToken(input: {
     // Типичный случай 2026: ключ сообщества есть, wall.post = 1051
     return {
       ok: false,
-      error: `Ключ из «Работа с API» не умеет публиковать на стену (${wall.msg}). ${VK_USER_TOKEN_HINT}`,
+      error: `Ключ сообщества не публикует на стену (${wall.msg}). ${VK_USER_TOKEN_HINT}`,
     };
   }
 
@@ -434,7 +449,7 @@ export async function verifyVkPublishToken(input: {
     if (wall.code === 15 || /access denied|permission|wall/i.test(wall.msg)) {
       return {
         ok: false,
-        error: `Нет права wall. На vkhost.github.io выберите Kate Mobile и разрешите все права. ${VK_USER_TOKEN_HINT}`,
+        error: `Нет права публиковать. Откройте вход VK ещё раз, нажмите «Разрешить» и вставьте новую длинную ссылку. ${VK_USER_TOKEN_HINT}`,
       };
     }
     return {

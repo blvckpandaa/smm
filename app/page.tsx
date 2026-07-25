@@ -9,9 +9,9 @@ import styles from "./page.module.css";
 
 const sampleSlots = [
   { time: "12:17", channel: "TG", topic: "Полезный совет клиентам" },
-  { time: "19:12", channel: "TG", topic: "Вопрос подписчикам" },
+  { time: "19:12", channel: "VK", topic: "Ответ бота на комментарий" },
   { time: "19:24", channel: "VK", topic: "История из работы" },
-  { time: "13:17", channel: "IG", topic: "Акция недели" },
+  { time: "13:17", channel: "TG", topic: "Вопрос подписчикам" },
 ];
 
 export default function HomePage() {
@@ -22,6 +22,11 @@ export default function HomePage() {
           <Link href="/" className={styles.logo}>
             SMM-Agents
           </Link>
+          <nav className={styles.navLinks} aria-label="Разделы">
+            <a href="#new">Новое</a>
+            <a href="#how">Как работает</a>
+            <a href="#price">Цены</a>
+          </nav>
           <SiteHeaderActions />
         </div>
       </header>
@@ -31,18 +36,18 @@ export default function HomePage() {
         <div className={styles.heroGrain} aria-hidden />
         <div className={`container ${styles.heroInner}`}>
           <div className={styles.heroBrandBlock}>
-            <p className={`eyebrow rise`}>ИИ-агент для соцсетей</p>
+            <p className={`eyebrow rise`}>ИИ-агент для соцсетей · smm-agents.ru</p>
             <h1 className={`${styles.brand} rise rise-delay-1`}>SMM-Agents</h1>
           </div>
 
           <div className={styles.heroGrid}>
             <div className={styles.heroCopy}>
               <p className={`${styles.headline} rise rise-delay-2`}>
-                Агент сам придумает посты и подскажет, когда их публиковать
+                Посты, расписание и ответы на комментарии — в одном кабинете
               </p>
               <p className={`${styles.lead} rise rise-delay-2`}>
-                Расскажите о бизнесе — получите план на неделю и готовые тексты
-                для Telegram и VK. Вы только проверяете и нажимаете «опубликовать».
+                Агент пишет контент для Telegram и VK, публикует по плану и
+                отвечает в комментариях: FAQ или ИИ.
               </p>
               <div className={`${styles.ctaRow} rise rise-delay-3`}>
                 <HomeCtaButtons />
@@ -52,12 +57,12 @@ export default function HomePage() {
             <div className={`${styles.heroVisual} rise rise-delay-2`} aria-hidden>
               <div className={styles.timeline}>
                 <div className={styles.timelineHead}>
-                  <span>План на неделю</span>
+                  <span>Сегодня в ленте</span>
                   <span className={styles.live}>live</span>
                 </div>
                 <div className={styles.rail}>
                   {sampleSlots.map((slot) => (
-                    <div key={slot.time + slot.channel} className={styles.slot}>
+                    <div key={slot.time + slot.channel + slot.topic} className={styles.slot}>
                       <div className={styles.slotMeta}>
                         <strong>{slot.time}</strong>
                         <span>{slot.channel}</span>
@@ -73,29 +78,70 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section id="new" className={`${styles.section} ${styles.sectionAlt}`}>
+        <div className="container">
+          <p className="eyebrow">Новые возможности</p>
+          <h2 className={styles.sectionTitle}>Больше, чем генератор постов</h2>
+          <p className={styles.sectionLead}>
+            Кабинет вырос: управление контентом, боты в комментариях и понятные
+            цены с баланса.
+          </p>
+          <div className={styles.capabilityList}>
+            <article>
+              <h3>Боты комментариев VK и Telegram</h3>
+              <p>
+                Отдельное подключение на 30 дней. Режим FAQ — бесплатные ответы
+                из вашей базы. Режим ИИ — короткий ответ по брифу за 2&nbsp;₽.
+              </p>
+            </article>
+            <article>
+              <h3>Таблица всех постов</h3>
+              <p>
+                Черновики, очередь и опубликованное в одном месте: фильтры по
+                каналу и статусу, правка текста, фото и публикация в один клик.
+              </p>
+            </article>
+            <article>
+              <h3>Переписать и новое фото</h3>
+              <p>
+                Не нравится текст или картинка — пересобрать за 25&nbsp;₽ без
+                новой недели плана. Баланс пополняется в кабинете.
+              </p>
+            </article>
+            <article>
+              <h3>Telegram и VK уже в работе</h3>
+              <p>
+                Подключите каналы, соберите план на неделю и публикуйте. Facebook
+                и X — в подготовке.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
       <section id="who" className={styles.section}>
         <div className="container">
           <p className="eyebrow">Кому подходит</p>
           <h2 className={styles.sectionTitle}>Любому бизнесу, где нужны посты</h2>
           <p className={styles.sectionLead}>
             Не важно, кафе у вас или онлайн-курсы — агент подстроится под вашу
-            аудиторию.
+            аудиторию и поможет не оставлять комментарии без ответа.
           </p>
           <ol className={styles.steps}>
             <li>
               <span>01</span>
               <h3>Магазины и услуги рядом</h3>
-              <p>Кафе, салоны, клиники, спортзалы — регулярные посты без SMM-отдела.</p>
+              <p>Кафе, салоны, клиники — посты и автоответы без SMM-отдела.</p>
             </li>
             <li>
               <span>02</span>
               <h3>Эксперты и курсы</h3>
-              <p>Полезный контент, доверие и мягкие предложения без спама.</p>
+              <p>Полезный контент, доверие и ответы на частые вопросы из FAQ.</p>
             </li>
             <li>
               <span>03</span>
               <h3>Несколько брендов</h3>
-              <p>Каждый клиент или бренд — отдельный проект со своими каналами.</p>
+              <p>Каждый бизнес — отдельный проект, свои каналы и свои боты.</p>
             </li>
           </ol>
         </div>
@@ -104,18 +150,21 @@ export default function HomePage() {
       <section id="how" className={`${styles.section} ${styles.sectionAlt}`}>
         <div className="container">
           <p className="eyebrow">Как это работает</p>
-          <h2 className={styles.sectionTitle}>Три простых шага</h2>
+          <h2 className={styles.sectionTitle}>От брифа до ответа в комментарии</h2>
           <p className={styles.sectionLead}>
-            Без сложных настроек. Сначала план, потом тексты, потом публикация.
+            Сначала контент, потом каналы, потом бот — всё в одном кабинете на
+            smm-agents.ru.
           </p>
           <div className={styles.featureSplit}>
             <div className={styles.featureCopy}>
-              <h3>1. Коротко опишите бизнес</h3>
-              <p>Чем занимаетесь, для кого, в каком тоне писать.</p>
-              <h3>2. Агент готовит план и тексты</h3>
-              <p>Темы, время публикаций и готовые посты на неделю.</p>
-              <h3>3. Вы проверяете и публикуете</h3>
-              <p>Можно поправить текст и отправить в Telegram или VK в один клик.</p>
+              <h3>1. Опишите бизнес</h3>
+              <p>Ниша, тон, сайт, ритм публикаций.</p>
+              <h3>2. Получите план и тексты</h3>
+              <p>Агент собирает неделю постов с разным временем выхода.</p>
+              <h3>3. Публикуйте и отвечайте</h3>
+              <p>
+                Проверьте ленту, отправьте в TG/VK и включите бота комментариев.
+              </p>
               <HomeHowCta />
             </div>
             <div className={styles.mixBoard} aria-label="Из чего состоит лента">
@@ -144,11 +193,40 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className={styles.section}>
-        <div className={`container ${styles.final}`}>
-          <h2 className={styles.sectionTitle}>Попробуйте сегодня</h2>
+      <section id="price" className={styles.section}>
+        <div className="container">
+          <p className="eyebrow">Цены</p>
+          <h2 className={styles.sectionTitle}>Прозрачно с баланса</h2>
           <p className={styles.sectionLead}>
-            Создайте аккаунт, добавьте бизнес и получите первый план за пару минут.
+            Без скрытых подписок на всё сразу — платите за то, чем пользуетесь.
+          </p>
+          <ul className={styles.priceList}>
+            <li>
+              <strong>50 ₽</strong>
+              <span>пост в недельном плане</span>
+            </li>
+            <li>
+              <strong>25 ₽</strong>
+              <span>переписать текст или новое фото</span>
+            </li>
+            <li>
+              <strong>290 ₽</strong>
+              <span>бот комментариев VK или TG на 30 дней</span>
+            </li>
+            <li>
+              <strong>0 / 2 ₽</strong>
+              <span>ответ FAQ бесплатно · ответ ИИ — 2 ₽</span>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section className={`${styles.section} ${styles.sectionAlt}`}>
+        <div className={`container ${styles.final}`}>
+          <h2 className={styles.sectionTitle}>Откройте кабинет на smm-agents.ru</h2>
+          <p className={styles.sectionLead}>
+            Создайте аккаунт, добавьте бизнес и запустите первую неделю контента
+            — ботов подключите, когда будете готовы.
           </p>
           <div className={styles.ctaRow}>
             <HomeFinalCta />
@@ -160,7 +238,7 @@ export default function HomePage() {
         <div className={`container ${styles.footerInner}`}>
           <span className={styles.logo}>SMM-Agents</span>
           <p>
-            Посты для соцсетей с помощью ИИ-агента.{" "}
+            Посты, расписание и боты комментариев.{" "}
             <a href="https://smm-agents.ru">smm-agents.ru</a>
           </p>
         </div>

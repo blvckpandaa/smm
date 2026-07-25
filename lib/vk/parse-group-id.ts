@@ -37,10 +37,16 @@ export function parseVkAccessToken(input: string): string {
 /**
  * Из ссылки / ID / короткого имени → идентификатор для VK API.
  * Примеры: 123, club123, vk.com/club123, vk.com/mybrand, @mybrand
+ * Не путать с oauth blank.html URL (там access_token, не сообщество).
  */
 export function parseVkGroupId(input: string): string | null {
   let raw = input.trim();
   if (!raw) return null;
+
+  // URL с токеном — это не ссылка на сообщество
+  if (/access_token=/i.test(raw) || /oauth\.vk\.com/i.test(raw)) {
+    return null;
+  }
 
   raw = raw.replace(/^@/, "");
 
@@ -49,6 +55,7 @@ export function parseVkGroupId(input: string): string | null {
       const url = new URL(
         /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
       );
+      if (/oauth\.vk\.com/i.test(url.hostname)) return null;
       raw = url.pathname.replace(/^\//, "").split("/")[0] || "";
     }
   } catch {
@@ -57,6 +64,13 @@ export function parseVkGroupId(input: string): string | null {
 
   raw = raw.split("?")[0].split("#")[0].trim();
   if (!raw) return null;
+
+  // Мусор из OAuth / файлов
+  if (
+    /^(blank\.html|authorize|access_token|login|feed|im|settings)$/i.test(raw)
+  ) {
+    return null;
+  }
 
   if (/^\d+$/.test(raw)) return raw;
 

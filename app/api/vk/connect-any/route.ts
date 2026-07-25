@@ -48,16 +48,14 @@ export async function POST(req: Request) {
     const accessToken =
       parseVkAccessToken(body.accessToken || body.raw || "") ||
       parseVkAccessToken(rawBlob);
-    const groupId =
-      parseVkGroupId(body.groupId || "") ||
-      parseVkGroupId(body.raw || "") ||
-      null;
+    // groupId только из явного поля — не парсить из blank.html URL
+    const groupId = parseVkGroupId(body.groupId || "") || null;
 
     if (!accessToken) {
       return Response.json(
         {
           error:
-            "Нужен токен или ссылка из окна VK (oauth.vk.com/blank.html#access_token=…)",
+            "Нужен код доступа VK: откройте вход, нажмите «Разрешить» и вставьте длинную ссылку (начинается с oauth.vk.com).",
         },
         { status: 400 }
       );
@@ -146,7 +144,7 @@ export async function POST(req: Request) {
         return Response.json(
           {
             error:
-              "Нет сообществ, где вы администратор. Создайте сообщество или укажите ссылку на него вместе с токеном.",
+              "Нет сообществ, где вы администратор. Войдите аккаунтом, которым управляете сообществом, или создайте сообщество во ВКонтакте.",
             groups: [],
           },
           { status: 404 }
@@ -203,7 +201,7 @@ export async function POST(req: Request) {
       return Response.json(
         {
           error:
-            "Это ключ сообщества. Укажите ещё ссылку или ID сообщества (например vk.com/club123) — и мы проверим публикацию.",
+            "Это ключ из настроек сообщества — им нельзя публиковать на стену. Нужен другой способ: откройте вход VK, нажмите «Разрешить» и вставьте длинную ссылку сюда.",
           needsGroupId: true,
         },
         { status: 400 }
@@ -214,7 +212,7 @@ export async function POST(req: Request) {
       {
         error:
           meData.error?.error_msg ||
-          "Токен недействителен. Нажмите «1. Войти через VK», разрешите доступ и вставьте новую ссылку из адресной строки.",
+          "Ссылка не подходит. Откройте вход VK ещё раз, нажмите «Разрешить» и вставьте новую длинную ссылку сверху того окна.",
       },
       { status: 400 }
     );

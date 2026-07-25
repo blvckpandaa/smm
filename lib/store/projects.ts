@@ -1,9 +1,28 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BrandBrief, Channel, ContentPlan } from "@/lib/marketer/types";
 import type { PostDraft } from "@/lib/smm/types";
 import { hashPassword, verifyPassword } from "@/lib/auth/session";
+import {
+  defaultCommentBot,
+  toPublicCommentBot,
+  type BotChannel,
+  type BotReplyLog,
+  type BotReplyMode,
+  type CommentBot,
+  type FaqItem,
+  type ProjectBots,
+} from "@/lib/bots/types";
+
+export type {
+  BotChannel,
+  BotReplyLog,
+  BotReplyMode,
+  CommentBot,
+  FaqItem,
+  ProjectBots,
+};
 
 export type LedgerEntry = {
   id: string;
@@ -172,6 +191,8 @@ export type Project = {
   updatedAt: string;
   brief: BrandBrief;
   channels: ProjectChannels;
+  bots?: ProjectBots;
+  botReplies?: BotReplyLog[];
   plan: ContentPlan | null;
   planSource: "deepseek" | "local" | null;
   planJob?: PlanJob | null;
@@ -271,6 +292,10 @@ function ensureStore(): StoreFile {
     parsed.projects = parsed.projects.map((p) => ({
       ...p,
       userId: (p as Project).userId || "",
+      bots: (p as Project).bots ?? {},
+      botReplies: Array.isArray((p as Project).botReplies)
+        ? (p as Project).botReplies
+        : [],
     }));
     parsed.users = parsed.users.map((u) => ({
       ...u,
@@ -529,6 +554,64 @@ export function chargeUserForPosts(input: {
   };
 }
 
+/** Списание фиксированной суммы за сервис (rewrite / фото и т.п.). */
+export function chargeUserFixed(input: {
+  userId: string;
+  amountRub: number;
+  description: string;
+  projectId?: string;
+}):
+  | { ok: true; balanceRub: number; chargedRub: number; entry: LedgerEntry }
+  | { ok: false; error: string; balanceRub: number; needRub: number } {
+  const chargedRub = Math.max(0, Math.round(input.amountRub * 100) / 100);
+  const balance = getUserBalance(input.userId);
+  if (chargedRub <= 0) {
+    return {
+      ok: true,
+      balanceRub: balance,
+      chargedRub: 0,
+      entry: {
+        id: "noop",
+        userId: input.userId,
+        type: "charge",
+        amountRub: 0,
+        balanceAfter: balance,
+        description: "Без списания",
+        createdAt: new Date().toISOString(),
+      },
+    };
+  }
+  if (balance + 0.001 < chargedRub) {
+    return {
+      ok: false,
+      error: `Недостаточно средств: нужно ${chargedRub} ₽, на балансе ${balance} ₽`,
+      balanceRub: balance,
+      needRub: chargedRub,
+    };
+  }
+  const result = creditOrDebit({
+    userId: input.userId,
+    amountRub: -chargedRub,
+    type: "charge",
+    description: input.description,
+    projectId: input.projectId,
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: result.error,
+      balanceRub: result.balanceRub,
+      needRub: chargedRub,
+    };
+  }
+  return {
+    ok: true,
+    balanceRub: result.balanceRub,
+    chargedRub,
+    entry: result.entry,
+  };
+}
+
 export function savePendingTopUp(input: {
   userId: string;
   amountRub: number;
@@ -608,6 +691,8 @@ export function createProject(
     updatedAt: now,
     brief,
     channels: {},
+    bots: {},
+    botReplies: [],
     plan: null,
     planSource: null,
     planJob: null,
@@ -630,6 +715,8 @@ export function updateProject(
       | "name"
       | "brief"
       | "channels"
+      | "bots"
+      | "botReplies"
       | "plan"
       | "planSource"
       | "planJob"
@@ -651,11 +738,18 @@ export function updateProject(
       : { ...current.channels, ...patch.channels }
     : current.channels;
 
+  const bots = patch.bots
+    ? { ...(current.bots ?? {}), ...patch.bots }
+    : current.bots;
+
   const next = touch({
     ...current,
     ...patch,
     brief: patch.brief ? { ...current.brief, ...patch.brief } : current.brief,
     channels,
+    bots,
+    botReplies:
+      patch.botReplies === undefined ? current.botReplies : patch.botReplies,
     planJob:
       patch.planJob === undefined
         ? current.planJob
@@ -1109,6 +1203,129 @@ export function removeChannel(
   return updateProject(projectId, userId, { channels }, { replaceChannels: true });
 }
 
+function addDaysIso(days: number, from = new Date()): string {
+  const d = new Date(from.getTime());
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString();
+}
+
+export function getCommentBot(
+  project: Project,
+  channel: BotChannel
+): CommentBot {
+  return project.bots?.[channel] ?? defaultCommentBot();
+}
+
+export function setCommentBot(
+  projectId: string,
+  userId: string,
+  channel: BotChannel,
+  bot: CommentBot
+): Project | null {
+  return updateProject(projectId, userId, {
+    bots: { [channel]: bot },
+  });
+}
+
+export function extendBotPaidUntil(
+  currentPaidUntil: string | null | undefined,
+  days: number
+): string {
+  const base =
+    currentPaidUntil && Date.parse(currentPaidUntil) > Date.now()
+      ? new Date(currentPaidUntil)
+      : new Date();
+  return addDaysIso(days, base);
+}
+
+export function appendBotReplyLog(
+  projectId: string,
+  entry: Omit<BotReplyLog, "id" | "createdAt">
+): Project | null {
+  const store = ensureStore();
+  const idx = store.projects.findIndex((p) => p.id === projectId);
+  if (idx === -1) return null;
+  const project = store.projects[idx];
+  const log: BotReplyLog = {
+    ...entry,
+    id: randomUUID(),
+    createdAt: new Date().toISOString(),
+  };
+  const botReplies = [log, ...(project.botReplies ?? [])].slice(0, 50);
+  const next = touch({ ...project, botReplies });
+  store.projects[idx] = next;
+  saveStore(store);
+  return next;
+}
+
+/** Обновить диагностику webhook без userId (callback от VK/TG). */
+export function touchBotWebhook(
+  projectId: string,
+  channel: BotChannel,
+  info: { type?: string; note?: string }
+): Project | null {
+  const store = ensureStore();
+  const idx = store.projects.findIndex((p) => p.id === projectId);
+  if (idx === -1) return null;
+  const project = store.projects[idx];
+  const current = project.bots?.[channel] ?? defaultCommentBot();
+  const bots: ProjectBots = {
+    ...(project.bots ?? {}),
+    [channel]: {
+      ...current,
+      lastWebhookAt: new Date().toISOString(),
+      lastWebhookType: info.type,
+      lastWebhookNote: info.note,
+    },
+  };
+  const next = touch({ ...project, bots });
+  store.projects[idx] = next;
+  saveStore(store);
+  return next;
+}
+
+export function findProjectByVkGroupId(groupId: string): Project | null {
+  const gid = String(groupId).replace(/^-/, "");
+  const store = ensureStore();
+  return (
+    store.projects.find((p) => {
+      const g = p.channels.vk?.groupId?.replace(/^-/, "");
+      return g && g === gid;
+    }) ?? null
+  );
+}
+
+export function findProjectByTelegramWebhookSecret(
+  secret: string
+): Project | null {
+  if (!secret) return null;
+  const store = ensureStore();
+  return (
+    store.projects.find((p) => p.bots?.telegram?.webhookSecret === secret) ??
+    null
+  );
+}
+
+export function findProjectByTelegramBotToken(token: string): Project | null {
+  if (!token) return null;
+  const store = ensureStore();
+  return (
+    store.projects.find((p) => p.channels.telegram?.botToken === token) ?? null
+  );
+}
+
+export function newBotSecrets(): {
+  vkConfirmation: string;
+  vkSecret: string;
+  webhookSecret: string;
+} {
+  return {
+    vkConfirmation: randomBytes(6).toString("hex"),
+    vkSecret: randomBytes(16).toString("hex"),
+    webhookSecret: randomBytes(24).toString("hex"),
+  };
+}
+
 export function toPublicProject(project: Project) {
   return {
     id: project.id,
@@ -1122,6 +1339,21 @@ export function toPublicProject(project: Project) {
     drafts: project.drafts,
     draftsSource: project.draftsSource,
     draftsJob: project.draftsJob ?? null,
+    bots: {
+      vk: toPublicCommentBot(project.bots?.vk),
+      telegram: toPublicCommentBot(project.bots?.telegram),
+    },
+    botReplies: (project.botReplies ?? []).slice(0, 30).map((r) => ({
+      id: r.id,
+      channel: r.channel,
+      mode: r.mode,
+      commentPreview: r.commentPreview,
+      replyPreview: r.replyPreview,
+      chargedRub: r.chargedRub,
+      createdAt: r.createdAt,
+      ok: r.ok,
+      error: r.error,
+    })),
     channels: {
       telegram: project.channels.telegram
         ? {
