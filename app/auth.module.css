@@ -4,15 +4,15 @@
   place-items: center;
   padding: 2rem 1rem;
   background:
-    radial-gradient(ellipse 50% 40% at 85% 10%, rgba(200, 255, 61, 0.35), transparent 55%),
-    linear-gradient(180deg, #e8eef2, #dde7e4);
+    radial-gradient(ellipse 50% 40% at 85% 10%, var(--glow), transparent 55%),
+    linear-gradient(180deg, var(--paper), var(--page-mid));
 }
 
 .card {
   width: min(100%, 440px);
   border: 1.5px solid var(--ink);
   border-radius: 22px;
-  background: color-mix(in srgb, white 78%, var(--paper));
+  background: color-mix(in srgb, var(--wash) 78%, var(--paper));
   padding: 1.6rem 1.5rem 1.7rem;
   box-shadow: 8px 10px 0 var(--ink);
 }
@@ -22,6 +22,13 @@
   font-weight: 800;
   font-size: 1.2rem;
   letter-spacing: -0.04em;
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .title {
@@ -53,7 +60,7 @@
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 0.55rem 0.8rem;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--surface);
   color: var(--ink);
 }
 
@@ -64,7 +71,7 @@
 
 .error {
   margin: 0;
-  color: #a1251b;
+  color: var(--danger);
   font-weight: 600;
 }
 

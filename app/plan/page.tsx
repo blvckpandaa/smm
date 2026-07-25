@@ -20,6 +20,7 @@ import {
 } from "@/lib/i18n/ui";
 import { isValidWebsiteUrl, normalizeWebsiteUrl } from "@/lib/marketer/website";
 import { parseVkGroupId } from "@/lib/vk/parse-group-id";
+import { ThemeToggle } from "@/app/components/ThemeToggle";
 import styles from "./plan.module.css";
 import { BotsPanel, type PublicBot, type PublicBotReply } from "./BotsPanel";
 
@@ -49,14 +50,101 @@ const TIMEZONES = [
 
 type Tab = "brief" | "plan" | "drafts" | "channels" | "bots";
 
-function tabsFor(lang: UiLang): { key: Tab; label: string; short: string }[] {
+type NavItem = {
+  key: Tab;
+  label: string;
+  short: string;
+  hint: string;
+  group: "work" | "connect" | "settings";
+};
+
+function NavGlyph({ tab }: { tab: Tab }) {
+  const props = {
+    width: 20,
+    height: 20,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  switch (tab) {
+    case "drafts":
+      return (
+        <svg {...props}>
+          <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+        </svg>
+      );
+    case "plan":
+      return (
+        <svg {...props}>
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <path d="M16 2v4M8 2v4M3 10h18" />
+        </svg>
+      );
+    case "channels":
+      return (
+        <svg {...props}>
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </svg>
+      );
+    case "bots":
+      return (
+        <svg {...props}>
+          <path d="M21 15a4 4 0 0 1-4 4H7l-4 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+        </svg>
+      );
+    case "brief":
+      return (
+        <svg {...props}>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+        </svg>
+      );
+  }
+}
+
+function navItemsFor(lang: UiLang): NavItem[] {
   const t = dict[lang];
   return [
-    { key: "drafts", label: t.tabDrafts, short: t.tabDraftsShort },
-    { key: "plan", label: t.tabPlan, short: t.tabPlanShort },
-    { key: "brief", label: t.tabBrief, short: t.tabBriefShort },
-    { key: "channels", label: t.tabChannels, short: t.tabChannelsShort },
-    { key: "bots", label: t.tabBots, short: t.tabBotsShort },
+    {
+      key: "drafts",
+      label: t.tabDrafts,
+      short: t.tabDraftsShort,
+      hint: t.navHintDrafts,
+      group: "work",
+    },
+    {
+      key: "plan",
+      label: t.tabPlan,
+      short: t.tabPlanShort,
+      hint: t.navHintPlan,
+      group: "work",
+    },
+    {
+      key: "channels",
+      label: t.tabChannels,
+      short: t.tabChannelsShort,
+      hint: t.navHintChannels,
+      group: "connect",
+    },
+    {
+      key: "bots",
+      label: t.tabBots,
+      short: t.tabBotsShort,
+      hint: t.navHintBots,
+      group: "connect",
+    },
+    {
+      key: "brief",
+      label: t.tabBrief,
+      short: t.tabBriefShort,
+      hint: t.navHintBrief,
+      group: "settings",
+    },
   ];
 }
 
@@ -509,7 +597,28 @@ export default function PlanPage() {
     }[]
   >([]);
   const t = dict[uiLang];
-  const TABS = useMemo(() => tabsFor(uiLang), [uiLang]);
+  const NAV = useMemo(() => navItemsFor(uiLang), [uiLang]);
+  const navGroups = useMemo(
+    () =>
+      [
+        {
+          id: "work" as const,
+          title: t.navGroupWork,
+          items: NAV.filter((i) => i.group === "work"),
+        },
+        {
+          id: "connect" as const,
+          title: t.navGroupConnect,
+          items: NAV.filter((i) => i.group === "connect"),
+        },
+        {
+          id: "settings" as const,
+          title: t.navGroupSettings,
+          items: NAV.filter((i) => i.group === "settings"),
+        },
+      ] as const,
+    [NAV, t.navGroupWork, t.navGroupConnect, t.navGroupSettings]
+  );
   const BUSINESS_TYPES = BUSINESS_TYPES_I18N[uiLang];
   const otherLabel = t.other;
 
@@ -1951,6 +2060,9 @@ export default function PlanPage() {
             SMM-Agents
           </Link>
           <div className={styles.projectBar}>
+            <ThemeToggle
+              labels={{ light: t.themeLight, dark: t.themeDark }}
+            />
             <div className={styles.langSwitch} role="group" aria-label={t.uiLang}>
               <button
                 type="button"
@@ -2049,100 +2161,132 @@ export default function PlanPage() {
         </div>
       ) : (
         <>
-          <div className={`container ${styles.workspace}`}>
-            <div className={styles.bizSwitch}>
-              <p className={styles.bizLabel}>{t.business}</p>
-              <div className={styles.bizList}>
-                {projects.map((p) => (
+          <div className={`container ${styles.cabinetShell}`}>
+            <aside
+              className={`${styles.sideNav} ${styles.desktopOnly}`}
+              aria-label={t.navMenu}
+            >
+              <div className={styles.sideBiz}>
+                <p className={styles.bizLabel}>{t.business}</p>
+                <div className={styles.sideBizList}>
+                  {projects.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={
+                        p.id === projectId ? styles.sideBizOn : styles.sideBizChip
+                      }
+                      onClick={() => {
+                        setProjectId(p.id);
+                        localStorage.setItem(ACTIVE_KEY, p.id);
+                        setSelectedDraftId(p.drafts[0]?.id ?? null);
+                        const today = todayInZone(
+                          p.brief.timezone || "Europe/Moscow"
+                        );
+                        const failed = p.drafts.filter(
+                          (d) =>
+                            d.status === "failed" || d.status === "rejected"
+                        ).length;
+                        const draftCount = p.drafts.filter((d) =>
+                          matchesStatusFilter(d, "draft", today)
+                        ).length;
+                        const scheduled = p.drafts.filter(
+                          (d) => d.status === "scheduled"
+                        ).length;
+                        const todayCount = p.drafts.filter(
+                          (d) => d.day === today
+                        ).length;
+                        setPostsStatusFilter(
+                          suggestPostsFilter({
+                            failed,
+                            draft: draftCount,
+                            scheduled,
+                            today: todayCount,
+                          })
+                        );
+                        setPostsChannelFilter("all");
+                        setPostsSearch("");
+                        setPostsSort("soon");
+                        setMobileEdit(false);
+                        if (p.drafts.length) setStep("drafts");
+                        else if (p.plan) setStep("plan");
+                        else setStep("brief");
+                      }}
+                    >
+                      <span className={styles.bizName}>{p.name}</span>
+                      <span className={styles.bizNiche}>
+                        {p.brief.niche
+                          ? nicheForUi(p.brief.niche, uiLang)
+                          : t.noNiche}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <div className={styles.createRowCompact}>
+                  <input
+                    className={styles.createInput}
+                    placeholder={t.newBusiness}
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                  />
                   <button
-                    key={p.id}
                     type="button"
-                    className={
-                      p.id === projectId ? styles.bizOn : styles.bizChip
-                    }
-                    onClick={() => {
-                      setProjectId(p.id);
-                      localStorage.setItem(ACTIVE_KEY, p.id);
-                      setSelectedDraftId(p.drafts[0]?.id ?? null);
-                      const today = todayInZone(
-                        p.brief.timezone || "Europe/Moscow"
-                      );
-                      const failed = p.drafts.filter(
-                        (d) =>
-                          d.status === "failed" || d.status === "rejected"
-                      ).length;
-                      const draftCount = p.drafts.filter((d) =>
-                        matchesStatusFilter(d, "draft", today)
-                      ).length;
-                      const scheduled = p.drafts.filter(
-                        (d) => d.status === "scheduled"
-                      ).length;
-                      const todayCount = p.drafts.filter(
-                        (d) => d.day === today
-                      ).length;
-                      setPostsStatusFilter(
-                        suggestPostsFilter({
-                          failed,
-                          draft: draftCount,
-                          scheduled,
-                          today: todayCount,
-                        })
-                      );
-                      setPostsChannelFilter("all");
-                      setPostsSearch("");
-                      setPostsSort("soon");
-                      setMobileEdit(false);
-                      if (p.drafts.length) setStep("drafts");
-                      else if (p.plan) setStep("plan");
-                      else setStep("brief");
-                    }}
+                    className="btn btn-ghost"
+                    disabled={pending}
+                    onClick={createNewProject}
                   >
-                    <span className={styles.bizName}>{p.name}</span>
-                    <span className={styles.bizNiche}>
-                      {p.brief.niche
-                        ? nicheForUi(p.brief.niche, uiLang)
-                        : t.noNiche}
-                    </span>
+                    +
                   </button>
-                ))}
+                </div>
               </div>
-              <div className={styles.createRowCompact}>
-                <input
-                  className={styles.createInput}
-                  placeholder={t.newBusiness}
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={pending}
-                  onClick={createNewProject}
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          </div>
 
-          <div className={`container ${styles.stepsWrap}`}>
-            <div className={`${styles.stepsNav} ${styles.desktopOnly}`}>
-              {TABS.map(({ key, label }) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={step === key ? styles.stepOn : styles.step}
-                  onClick={() => {
-                    setStep(key);
-                    setMobileEdit(false);
-                  }}
-                >
-                  {label}
-                </button>
+              {navGroups.map((group) => (
+                <div key={group.id} className={styles.sideGroup}>
+                  <p className={styles.sideGroupTitle}>{group.title}</p>
+                  <div className={styles.sideItems}>
+                    {group.items.map((item) => {
+                      const badge =
+                        item.key === "drafts" && postsStats.attention > 0
+                          ? postsStats.attention
+                          : 0;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          className={
+                            step === item.key
+                              ? styles.sideItemOn
+                              : styles.sideItem
+                          }
+                          onClick={() => {
+                            setStep(item.key);
+                            setMobileEdit(false);
+                          }}
+                        >
+                          <span className={styles.sideItemIcon}>
+                            <NavGlyph tab={item.key} />
+                          </span>
+                          <span className={styles.sideItemText}>
+                            <span className={styles.sideItemLabel}>
+                              {item.label}
+                            </span>
+                            <span className={styles.sideItemHint}>
+                              {item.hint}
+                            </span>
+                          </span>
+                          {badge > 0 && (
+                            <span className={styles.sideBadge}>{badge}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               ))}
+
               <button
                 type="button"
-                className={styles.stepDanger}
+                className={styles.sideDanger}
                 onClick={() => {
                   setDeleteOpen(true);
                   setDeleteConfirm("");
@@ -2151,25 +2295,104 @@ export default function PlanPage() {
               >
                 {t.delete}
               </button>
-            </div>
-            <div className={styles.dashMeta}>
-              <span>
-                <strong>{project.name}</strong>
-              </span>
-              <span className={styles.hideXs}>
-                {brief.niche
-                  ? nicheForUi(brief.niche, uiLang)
-                  : t.nicheNotSet}
-              </span>
-              <span className={styles.hideXs}>{brief.timezone}</span>
-              <span>
-                TG {project.channels.telegram.connected ? "✓" : "—"}
-              </span>
-              <span>VK {project.channels.vk.connected ? "✓" : "—"}</span>
-            </div>
-          </div>
+            </aside>
 
-          <div className={`container ${styles.layout}`}>
+            <div className={styles.cabinetMain}>
+              <div className={`${styles.bizSwitch} ${styles.mobileOnly}`}>
+                <p className={styles.bizLabel}>{t.business}</p>
+                <div className={styles.bizList}>
+                  {projects.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={
+                        p.id === projectId ? styles.bizOn : styles.bizChip
+                      }
+                      onClick={() => {
+                        setProjectId(p.id);
+                        localStorage.setItem(ACTIVE_KEY, p.id);
+                        setSelectedDraftId(p.drafts[0]?.id ?? null);
+                        const today = todayInZone(
+                          p.brief.timezone || "Europe/Moscow"
+                        );
+                        const failed = p.drafts.filter(
+                          (d) =>
+                            d.status === "failed" || d.status === "rejected"
+                        ).length;
+                        const draftCount = p.drafts.filter((d) =>
+                          matchesStatusFilter(d, "draft", today)
+                        ).length;
+                        const scheduled = p.drafts.filter(
+                          (d) => d.status === "scheduled"
+                        ).length;
+                        const todayCount = p.drafts.filter(
+                          (d) => d.day === today
+                        ).length;
+                        setPostsStatusFilter(
+                          suggestPostsFilter({
+                            failed,
+                            draft: draftCount,
+                            scheduled,
+                            today: todayCount,
+                          })
+                        );
+                        setPostsChannelFilter("all");
+                        setPostsSearch("");
+                        setPostsSort("soon");
+                        setMobileEdit(false);
+                        if (p.drafts.length) setStep("drafts");
+                        else if (p.plan) setStep("plan");
+                        else setStep("brief");
+                      }}
+                    >
+                      <span className={styles.bizName}>{p.name}</span>
+                      <span className={styles.bizNiche}>
+                        {p.brief.niche
+                          ? nicheForUi(p.brief.niche, uiLang)
+                          : t.noNiche}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <div className={styles.createRowCompact}>
+                  <input
+                    className={styles.createInput}
+                    placeholder={t.newBusiness}
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={pending}
+                    onClick={createNewProject}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.pageHead}>
+                <div className={styles.dashMeta}>
+                  <span>
+                    <strong>{project.name}</strong>
+                  </span>
+                  <span className={styles.hideXs}>
+                    {brief.niche
+                      ? nicheForUi(brief.niche, uiLang)
+                      : t.nicheNotSet}
+                  </span>
+                  <span className={styles.hideXs}>{brief.timezone}</span>
+                  <span>
+                    TG {project.channels.telegram.connected ? "✓" : "—"}
+                  </span>
+                  <span>
+                    VK {project.channels.vk.connected ? "✓" : "—"}
+                  </span>
+                </div>
+              </div>
+
+              <div className={styles.layout}>
             {step === "brief" && (
               <section className={`${styles.panel} ${styles.wide}`}>
                 <p className="eyebrow">
@@ -3966,24 +4189,38 @@ export default function PlanPage() {
                 }}
               />
             )}
+              </div>
+            </div>
           </div>
 
-          <nav className={styles.bottomNav} aria-label="Разделы кабинета">
-            {TABS.map(({ key, short }) => (
-              <button
-                key={key}
-                type="button"
-                className={
-                  step === key ? styles.bottomNavOn : styles.bottomNavBtn
-                }
-                onClick={() => {
-                  setStep(key);
-                  setMobileEdit(false);
-                }}
-              >
-                {short}
-              </button>
-            ))}
+          <nav className={styles.bottomNav} aria-label={t.navMenu}>
+            {NAV.map(({ key, short }) => {
+              const badge =
+                key === "drafts" && postsStats.attention > 0
+                  ? postsStats.attention
+                  : 0;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={
+                    step === key ? styles.bottomNavOn : styles.bottomNavBtn
+                  }
+                  onClick={() => {
+                    setStep(key);
+                    setMobileEdit(false);
+                  }}
+                >
+                  <span className={styles.bottomNavIcon}>
+                    <NavGlyph tab={key} />
+                    {badge > 0 && (
+                      <span className={styles.bottomNavBadge}>{badge}</span>
+                    )}
+                  </span>
+                  <span className={styles.bottomNavLabel}>{short}</span>
+                </button>
+              );
+            })}
           </nav>
 
           {vkPickOpen && (

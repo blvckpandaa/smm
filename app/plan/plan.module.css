@@ -1,8 +1,8 @@
 .page {
   min-height: 100vh;
   background:
-    radial-gradient(ellipse 50% 35% at 90% 0%, rgba(200, 255, 61, 0.28), transparent 55%),
-    linear-gradient(180deg, #e8eef2, #dde7e4 50%, #e8eef2);
+    radial-gradient(ellipse 50% 35% at 90% 0%, var(--glow), transparent 55%),
+    linear-gradient(180deg, var(--paper), var(--page-mid) 50%, var(--paper));
 }
 
 .top {
@@ -61,6 +61,11 @@
   color: var(--muted);
 }
 
+.langOn {
+  background: var(--lime);
+  color: var(--on-lime);
+}
+
 .balanceChip {
   display: inline-flex;
   flex-direction: column;
@@ -71,6 +76,7 @@
   border-radius: 12px;
   border: 1.5px solid var(--ink);
   background: var(--lime);
+  color: var(--on-lime);
   cursor: pointer;
   line-height: 1.1;
 }
@@ -80,11 +86,12 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: color-mix(in srgb, var(--ink) 70%, transparent);
+  color: color-mix(in srgb, var(--on-lime) 70%, transparent);
 }
 
 .balanceChip strong {
   font-size: 0.95rem;
+  color: var(--on-lime);
 }
 
 .billingHint {
@@ -110,7 +117,7 @@
   padding: 0.85rem 1rem;
   border-radius: 14px;
   border: 1.5px solid var(--ink);
-  background: color-mix(in srgb, var(--lime) 40%, white);
+  background: color-mix(in srgb, var(--lime) 40%, var(--wash));
 }
 
 .billingBalance span {
@@ -157,7 +164,7 @@
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 0.65rem 2.5rem 0.65rem 0.85rem;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--surface-strong);
   color: var(--ink);
   font-size: 1.05rem;
   font-weight: 700;
@@ -214,7 +221,7 @@
   border-radius: 16px;
   border: 1.5px solid var(--line);
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--lime) 28%, white), var(--paper));
+    linear-gradient(135deg, color-mix(in srgb, var(--lime) 28%, var(--wash)), var(--paper));
 }
 
 .freqHead {
@@ -275,6 +282,7 @@
 
 .freqPresetOn {
   background: var(--lime);
+  color: var(--on-lime);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
 }
 
@@ -447,7 +455,7 @@
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 0.45rem 0.75rem;
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--surface);
   color: var(--ink);
   font-weight: 600;
 }
@@ -469,13 +477,216 @@
   padding-top: 1.1rem;
 }
 
+.cabinetShell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  padding-top: 1.1rem;
+  padding-bottom: 2rem;
+  align-items: start;
+}
+
+.sideNav {
+  display: none;
+}
+
+.cabinetMain {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.pageHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.pageHead .dashMeta {
+  margin-top: 0;
+}
+
+@media (min-width: 861px) {
+  .cabinetShell {
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 1.35rem;
+    padding-top: 1.25rem;
+  }
+
+  .sideNav {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    position: sticky;
+    top: 5.25rem;
+    max-height: calc(100vh - 5.75rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 1rem;
+    border: 1.5px solid var(--line);
+    border-radius: 20px;
+    background: var(--surface);
+    scrollbar-gutter: stable;
+  }
+
+  .sideBiz {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .sideBizList {
+    display: grid;
+    gap: 0.4rem;
+    max-height: 11rem;
+    overflow: auto;
+  }
+
+  .sideBizChip,
+  .sideBizOn {
+    display: grid;
+    gap: 0.1rem;
+    text-align: left;
+    padding: 0.55rem 0.7rem;
+    border-radius: 12px;
+    border: 1.5px solid var(--line);
+    background: transparent;
+    cursor: pointer;
+    color: var(--ink);
+  }
+
+  .sideBizOn {
+    border-color: var(--ink);
+    background: var(--lime);
+    color: var(--on-lime);
+  }
+
+  .sideBizOn .bizName,
+  .sideBizOn .bizNiche {
+    color: inherit;
+  }
+
+  .sideBizOn .bizNiche {
+    color: color-mix(in srgb, var(--on-lime) 70%, transparent);
+  }
+
+  .sideGroup {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .sideGroupTitle {
+    margin: 0;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .sideItems {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .sideItem,
+  .sideItemOn {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: center;
+    gap: 0.55rem;
+    width: 100%;
+    text-align: left;
+    padding: 0.55rem 0.6rem;
+    border-radius: 14px;
+    border: 1.5px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    color: var(--muted);
+  }
+
+  .sideItem:hover {
+    background: rgba(0, 0, 0, 0.03);
+    color: var(--ink);
+  }
+
+  .sideItemOn {
+    border-color: var(--ink);
+    background: var(--lime);
+    color: var(--on-lime);
+  }
+
+  .sideItemIcon {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+  }
+
+  .sideItemText {
+    display: grid;
+    gap: 0.05rem;
+    min-width: 0;
+  }
+
+  .sideItemLabel {
+    font-weight: 800;
+    font-size: 0.92rem;
+    color: inherit;
+  }
+
+  .sideItemHint {
+    font-size: 0.72rem;
+    font-weight: 600;
+    opacity: 0.75;
+    line-height: 1.25;
+  }
+
+  .sideBadge {
+    min-width: 1.35rem;
+    height: 1.35rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 0.7rem;
+    font-weight: 800;
+    display: grid;
+    place-items: center;
+  }
+
+  .sideDanger {
+    margin-top: auto;
+    flex-shrink: 0;
+    min-height: 40px;
+    padding: 0.45rem 0.75rem;
+    border-radius: 12px;
+    border: 1.5px solid var(--danger-line);
+    background: transparent;
+    color: var(--danger);
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  .sideDanger:hover {
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+  }
+}
+
+.cabinetMain .layout {
+  padding-block: 0 1.5rem;
+}
+
 .bizSwitch {
   display: grid;
   gap: 0.65rem;
   padding: 0.95rem 1.05rem;
   border: 1.5px solid var(--line);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--surface);
 }
 
 .bizLabel {
@@ -502,7 +713,7 @@
   padding: 0.55rem 0.8rem;
   border-radius: 14px;
   border: 1.5px solid var(--line);
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--surface);
   cursor: pointer;
   color: var(--ink);
 }
@@ -510,6 +721,7 @@
 .bizOn {
   border-color: var(--ink);
   background: var(--lime);
+  color: var(--on-lime);
 }
 
 .bizName {
@@ -523,8 +735,9 @@
   font-weight: 600;
 }
 
-.bizOn .bizNiche {
-  color: var(--ink-soft);
+.bizOn .bizNiche,
+.sideBizOn .bizNiche {
+  color: color-mix(in srgb, var(--on-lime) 70%, transparent);
 }
 
 .createRow,
@@ -546,7 +759,7 @@
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 0.55rem 0.8rem;
-  background: #fff;
+  background: var(--surface-strong);
   color: var(--ink);
   font-weight: 600;
 }
@@ -563,7 +776,7 @@
   border-radius: 14px;
   display: grid;
   gap: 0.65rem;
-  background: rgba(255, 255, 255, 0.45);
+  background: var(--surface-soft);
 }
 
 .trashRow {
@@ -594,7 +807,7 @@
   border: 1.5px solid var(--ink);
   border-radius: 18px;
   padding: 1.2rem 1.15rem 1.25rem;
-  background: #fff;
+  background: var(--surface-strong);
   display: grid;
   gap: 0.75rem;
   box-shadow: 8px 10px 0 var(--ink);
@@ -640,7 +853,7 @@
   padding: 0.35rem 0.75rem;
   border-radius: 999px;
   border: 1.5px solid var(--line);
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--surface);
   font-weight: 700;
   font-size: 0.82rem;
   cursor: pointer;
@@ -650,7 +863,7 @@
 .typeOn {
   border-color: var(--ink);
   background: var(--lime);
-  color: var(--ink);
+  color: var(--on-lime);
 }
 
 .dashMeta {
@@ -694,7 +907,7 @@
   border: 1.5px solid var(--ink);
   border-radius: 16px;
   padding: 1.1rem;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--surface-muted);
   position: relative;
 }
 
@@ -760,7 +973,7 @@
   align-items: center;
   justify-content: center;
   background: #2787f5;
-  color: #fff;
+  color: var(--paper);
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -793,7 +1006,7 @@
   margin: 0 0 1rem;
   padding: 0.75rem 1rem;
   border-radius: 10px;
-  background: #fff8e6;
+  background: var(--warn-bg);
   border: 1px solid #f0d78c;
   color: #6b5200;
   font-size: 0.92rem;
@@ -822,6 +1035,7 @@
   border-radius: 999px;
   border: 1.5px solid var(--ink);
   background: var(--lime);
+  color: var(--on-lime);
   font-weight: 800;
   font-size: 1rem;
   cursor: pointer;
@@ -841,7 +1055,7 @@
   padding: 0.9rem 1rem 1rem;
   border: 1.5px solid var(--ink);
   border-radius: 14px;
-  background: #fff;
+  background: var(--surface-strong);
   box-shadow: 6px 8px 0 var(--ink);
 }
 
@@ -879,7 +1093,7 @@
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 0.55rem 0.75rem;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--surface);
   color: var(--ink);
 }
 
@@ -921,7 +1135,7 @@
 .stepOn {
   border-color: var(--ink);
   background: var(--lime);
-  color: var(--ink);
+  color: var(--on-lime);
 }
 
 .stepDanger {
@@ -953,7 +1167,7 @@
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--surface-muted);
 }
 
 .contentTable {
@@ -976,7 +1190,7 @@
   letter-spacing: 0.04em;
   color: var(--muted);
   font-weight: 800;
-  background: rgba(255, 255, 255, 0.45);
+  background: var(--surface-soft);
   position: sticky;
   top: 0;
 }
@@ -1008,7 +1222,7 @@
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 0.65rem 0.7rem;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--surface-muted);
   cursor: pointer;
   color: var(--ink);
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -1075,7 +1289,7 @@
   padding: 0.75rem 0.9rem;
   text-align: left;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--surface);
   color: var(--ink);
 }
 
@@ -1123,7 +1337,7 @@
   padding: 0.55rem 0.55rem 0.35rem;
   margin: 0 -0.55rem 0.85rem;
   border-radius: 16px;
-  background: color-mix(in srgb, var(--paper) 88%, white);
+  background: color-mix(in srgb, var(--paper) 88%, var(--wash));
   backdrop-filter: blur(8px);
   border: 1px solid transparent;
 }
@@ -1176,7 +1390,7 @@
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 0.55rem 0.75rem;
-  background: #fff;
+  background: var(--surface-strong);
   color: var(--ink);
   font: inherit;
   width: 100%;
@@ -1235,7 +1449,7 @@
   color: var(--muted);
   position: sticky;
   top: 0;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--surface);
   z-index: 1;
 }
 
@@ -1445,7 +1659,7 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 0.7rem 0.85rem;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--surface-muted);
 }
 
 .botHistoryTop {
@@ -1495,7 +1709,7 @@
 
 .rowAction {
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--surface-strong);
   color: var(--ink);
   border-radius: 9px;
   padding: 0.28rem 0.5rem;
@@ -1573,7 +1787,7 @@
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 1.15rem 1.15rem 1.25rem;
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--surface);
   display: grid;
   gap: 0.85rem;
   position: sticky;
@@ -1615,7 +1829,7 @@
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 0.7rem 0.85rem;
-  background: #fff;
+  background: var(--surface-strong);
   color: var(--ink);
   line-height: 1.45;
   resize: vertical;
@@ -1629,7 +1843,7 @@
 
 .fieldControl:disabled {
   opacity: 0.65;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--surface-muted);
 }
 
 textarea.fieldControl {
@@ -1644,7 +1858,7 @@ textarea.fieldControl {
   display: grid;
   gap: 1rem;
   justify-items: center;
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--surface-soft);
 }
 
 .summaryActions {
@@ -1825,7 +2039,7 @@ textarea.fieldControl {
     border: 1.5px solid var(--line);
     border-radius: 16px;
     padding: 0.85rem 0.95rem;
-    background: rgba(255, 255, 255, 0.82);
+    background: var(--surface);
     color: var(--ink);
     cursor: default;
     -webkit-tap-highlight-color: transparent;
@@ -1833,7 +2047,8 @@ textarea.fieldControl {
 
   .mobileCardOn {
     border-color: var(--ink);
-    background: color-mix(in srgb, var(--lime) 55%, white);
+    background: color-mix(in srgb, var(--lime) 55%, var(--wash));
+    color: var(--on-lime);
   }
 
   .mobileCardTop {
@@ -1968,27 +2183,32 @@ textarea.fieldControl {
 
   .bottomNav {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
     z-index: 40;
-    gap: 0.15rem;
-    padding: 0.4rem 0.45rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
+    gap: 0.1rem;
+    padding: 0.35rem 0.3rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--line);
-    background: color-mix(in srgb, var(--paper) 92%, white);
+    background: color-mix(in srgb, var(--paper) 92%, var(--wash));
     backdrop-filter: blur(14px);
   }
 
   .bottomNavBtn,
   .bottomNavOn {
-    min-height: 48px;
+    position: relative;
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 0.15rem;
+    min-height: 52px;
     border: 0;
     border-radius: 14px;
     background: transparent;
     font-weight: 800;
-    font-size: 0.78rem;
+    font-size: 0.68rem;
     color: var(--muted);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
@@ -1996,7 +2216,45 @@ textarea.fieldControl {
 
   .bottomNavOn {
     background: var(--lime);
-    color: var(--ink);
+    color: var(--on-lime);
+  }
+
+  .bottomNavIcon {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+  }
+
+  .bottomNavIcon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .bottomNavBadge {
+    position: absolute;
+    top: -4px;
+    right: -8px;
+    min-width: 1rem;
+    height: 1rem;
+    padding: 0 0.25rem;
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 0.62rem;
+    font-weight: 800;
+    display: grid;
+    place-items: center;
+    line-height: 1;
+  }
+
+  .bottomNavLabel {
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .post header {
@@ -2076,7 +2334,7 @@ textarea.fieldControl {
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 1rem 1.05rem 1.1rem;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--surface-muted);
   display: grid;
   gap: 0.65rem;
 }
@@ -2117,7 +2375,7 @@ textarea.fieldControl {
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 0.55rem 0.75rem;
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--surface);
   color: var(--ink);
   resize: vertical;
 }
@@ -2134,7 +2392,7 @@ textarea.fieldControl {
 .result {
   border: 1.5px solid var(--ink);
   border-radius: 22px;
-  background: color-mix(in srgb, white 70%, var(--paper));
+  background: color-mix(in srgb, var(--wash) 70%, var(--paper));
   padding: 1.35rem 1.35rem 1.5rem;
 }
 
@@ -2173,7 +2431,7 @@ textarea.fieldControl {
 }
 
 .error {
-  color: #a1251b;
+  color: var(--danger);
   font-weight: 600;
   margin: 0 0 0.85rem;
 }
@@ -2208,7 +2466,7 @@ textarea.fieldControl {
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 0.55rem 0.75rem;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--surface);
   color: var(--ink);
 }
 
@@ -2236,6 +2494,7 @@ textarea.fieldControl {
 
 .chipOn {
   background: var(--lime);
+  color: var(--on-lime);
 }
 
 .empty {
@@ -2282,6 +2541,7 @@ textarea.fieldControl {
   border-radius: 14px;
   border: 1.5px solid var(--ink);
   background: var(--lime);
+  color: var(--on-lime);
   display: grid;
 }
 
@@ -2314,7 +2574,7 @@ textarea.fieldControl {
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 1rem 1.05rem 1.1rem;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--surface-muted);
 }
 
 .post header {

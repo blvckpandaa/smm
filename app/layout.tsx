@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Syne, Manrope } from "next/font/google";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 const syne = Syne({
@@ -99,8 +100,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#0f172a" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
+    { media: "(prefers-color-scheme: light)", color: "#e8eef2" },
+    { media: "(prefers-color-scheme: dark)", color: "#12161a" },
   ],
 };
 
@@ -110,7 +111,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" className={`${syne.variable} ${manrope.variable}`}>
+    <html lang="ru" className={`${syne.variable} ${manrope.variable}`} suppressHydrationWarning>
       <body
         style={
           {
@@ -119,6 +120,9 @@ export default function RootLayout({
           } as React.CSSProperties
         }
       >
+        <Script id="theme-boot" strategy="beforeInteractive">
+          {THEME_BOOT_SCRIPT}
+        </Script>
         {children}
         <Script id="yandex-metrika" strategy="afterInteractive">{`
 (function(m,e,t,r,i,k,a){

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ThemeToggle } from "./ThemeToggle";
 import styles from "../page.module.css";
 
 type User = { id: string; name: string; email: string };
@@ -20,44 +21,47 @@ export function SiteHeaderActions() {
 
   if (!loaded) {
     return (
-      <>
+      <div className={styles.headerActions}>
         <nav className={styles.navLinks}>
           <a href="#how">Как это работает</a>
           <a href="#who">Кому подходит</a>
         </nav>
+        <ThemeToggle />
         <span className="btn" style={{ opacity: 0.35, pointerEvents: "none" }}>
           …
         </span>
-      </>
+      </div>
     );
   }
 
   if (user) {
     return (
-      <>
+      <div className={styles.headerActions}>
         <nav className={styles.navLinks}>
           <a href="#how">Как это работает</a>
           <a href="#who">Кому подходит</a>
           <Link href="/plan">Кабинет</Link>
         </nav>
+        <ThemeToggle />
         <Link href="/plan" className="btn">
           В кабинет
         </Link>
-      </>
+      </div>
     );
   }
 
   return (
-    <>
+    <div className={styles.headerActions}>
       <nav className={styles.navLinks}>
         <a href="#how">Как это работает</a>
         <a href="#who">Кому подходит</a>
         <Link href="/login">Вход</Link>
       </nav>
+      <ThemeToggle />
       <Link href="/register" className="btn">
         Начать бесплатно
       </Link>
-    </>
+    </div>
   );
 }
 

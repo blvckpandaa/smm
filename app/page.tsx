@@ -282,6 +282,14 @@ export default function HomePage() {
       <footer className={styles.footer}>
         <div className={`container ${styles.footerInner}`}>
           <span className={styles.logo}>SMM-Agents</span>
+          <nav className={styles.footerLinks} aria-label="Полезные страницы">
+            <Link href="/guides/smm-bez-agentstva">Без агентства</Link>
+            <Link href="/guides/ne-uspevayu-vesti-socseti">Нет времени</Link>
+            <Link href="/guides/posts-dlya-kafe">Кафе и услуги</Link>
+            <Link href="/guides/kontent-dlya-eksperta">Эксперты</Link>
+            <Link href="/guides/psiholog-v-socsetyah">Психологи</Link>
+            <Link href="/guides">Все гайды</Link>
+          </nav>
           <p>
             Посты, расписание и боты комментариев.{" "}
             <a href="https://smm-agents.ru">smm-agents.ru</a>

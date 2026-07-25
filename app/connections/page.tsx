@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ThemeToggle } from "../components/ThemeToggle";
 import styles from "./connections.module.css";
 
 export default function ConnectionsPage() {
@@ -9,9 +10,12 @@ export default function ConnectionsPage() {
           <Link href="/" className={styles.logo}>
             SMM-Agents
           </Link>
-          <Link href="/plan" className="btn">
-            В кабинет
-          </Link>
+          <div className={styles.topActions}>
+            <ThemeToggle />
+            <Link href="/plan" className="btn">
+              В кабинет
+            </Link>
+          </div>
         </div>
       </header>
 

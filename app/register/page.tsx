@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ThemeToggle } from "../components/ThemeToggle";
 import styles from "../auth.module.css";
 
 export default function RegisterPage() {
@@ -51,9 +52,12 @@ export default function RegisterPage() {
   return (
     <main className={styles.page}>
       <div className={styles.card}>
-        <Link href="/" className={styles.logo}>
-          SMM-Agents
-        </Link>
+        <div className={styles.cardTop}>
+          <Link href="/" className={styles.logo}>
+            SMM-Agents
+          </Link>
+          <ThemeToggle />
+        </div>
         <h1 className={styles.title}>Создать аккаунт</h1>
         <p className={styles.lead}>
           Зарегистрируйтесь, чтобы нанять агента и вести контент для своего

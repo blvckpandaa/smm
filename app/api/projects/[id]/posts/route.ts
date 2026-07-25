@@ -1,5 +1,5 @@
 import { requireSession } from "@/lib/auth/request";
-import { generateImageBytes } from "@/lib/ai/image";
+import { generateImageBytes, hasPollinationsKey } from "@/lib/ai/image";
 import { saveProjectImage } from "@/lib/media/store";
 import { writePostsFromPlan } from "@/lib/smm/writer";
 import { draftNeedsPhoto } from "@/lib/smm/photo";
@@ -14,7 +14,7 @@ import {
 type Ctx = { params: Promise<{ id: string }> };
 
 const DRAFTS_JOB_TTL_MS = 30 * 60_000;
-const PHOTO_CONCURRENCY = 3;
+const PHOTO_CONCURRENCY = hasPollinationsKey() ? 2 : 1;
 
 function isDraftsJobFresh(
   job: { status: string; startedAt: string } | null | undefined

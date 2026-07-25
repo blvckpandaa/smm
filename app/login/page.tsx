@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { ThemeToggle } from "../components/ThemeToggle";
 import styles from "../auth.module.css";
 
 function LoginForm() {
@@ -46,9 +47,12 @@ function LoginForm() {
 
   return (
     <div className={styles.card}>
-      <Link href="/" className={styles.logo}>
-        SMM-Agents
-      </Link>
+      <div className={styles.cardTop}>
+        <Link href="/" className={styles.logo}>
+          SMM-Agents
+        </Link>
+        <ThemeToggle />
+      </div>
       <h1 className={styles.title}>Вход</h1>
       <p className={styles.lead}>
         Войдите, чтобы открыть кабинет и продолжить работу с агентом.
