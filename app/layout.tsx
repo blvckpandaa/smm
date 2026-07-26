@@ -83,15 +83,29 @@ export const metadata: Metadata = {
     },
   },
   icons: {
+    // Stable icons for Google/Yandex SERP (48x48+) — no media/query switching
     icon: [
       { url: "/favicon-48x48.png", sizes: "48x48", type: "image/png" },
       { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
-      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      {
+        url: "/favicon/light/32.png",
+        sizes: "32x32",
+        type: "image/png",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        url: "/favicon/dark/32.png",
+        sizes: "32x32",
+        type: "image/png",
+        media: "(prefers-color-scheme: dark)",
+      },
     ],
-    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+    apple: [{ url: "/favicon/light/180.png", sizes: "180x180", type: "image/png" }],
+  },
+  other: {
+    "msapplication-TileImage": "/icon-192.png",
   },
   manifest: "/site.webmanifest",
   category: "technology",

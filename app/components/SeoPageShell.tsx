@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ThemeToggle } from "./ThemeToggle";
+import { BrandLogo } from "./BrandLogo";
 import home from "../page.module.css";
 import styles from "../guides/guides.module.css";
 
@@ -15,7 +16,7 @@ export function SeoPageShell({ children }: Props) {
       <header className={home.nav}>
         <div className={`container ${home.navInner}`}>
           <Link href="/" className={home.logo}>
-            SMM-Agents
+            <BrandLogo />
           </Link>
           <nav className={home.navLinks} aria-label="Разделы">
             <Link href="/guides/smm-bez-agentstva">Без агентства</Link>
@@ -37,7 +38,7 @@ export function SeoPageShell({ children }: Props) {
       <footer className={home.footer}>
         <div className={`container ${home.footerInner}`}>
           <Link href="/" className={home.logo}>
-            SMM-Agents
+            <BrandLogo size={24} />
           </Link>
           <nav className={styles.footerNav} aria-label="Полезные страницы">
             <Link href="/guides/smm-bez-agentstva">Без агентства</Link>

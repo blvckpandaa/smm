@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { BrandLogo } from "../components/BrandLogo";
 import styles from "../auth.module.css";
 
 export default function RegisterPage() {
@@ -54,7 +55,7 @@ export default function RegisterPage() {
       <div className={styles.card}>
         <div className={styles.cardTop}>
           <Link href="/" className={styles.logo}>
-            SMM-Agents
+            <BrandLogo />
           </Link>
           <ThemeToggle />
         </div>

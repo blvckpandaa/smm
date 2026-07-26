@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { BrandLogo } from "../components/BrandLogo";
 import styles from "../auth.module.css";
 
 function LoginForm() {
@@ -49,7 +50,7 @@ function LoginForm() {
     <div className={styles.card}>
       <div className={styles.cardTop}>
         <Link href="/" className={styles.logo}>
-          SMM-Agents
+          <BrandLogo />
         </Link>
         <ThemeToggle />
       </div>

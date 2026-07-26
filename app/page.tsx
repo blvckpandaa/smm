@@ -5,6 +5,7 @@ import {
   HomeHowCta,
   SiteHeaderActions,
 } from "./components/HomeAuth";
+import { BrandLogo } from "./components/BrandLogo";
 import styles from "./page.module.css";
 
 const sampleSlots = [
@@ -22,20 +23,30 @@ const jsonLd = {
       "@id": "https://smm-agents.ru/#website",
       url: "https://smm-agents.ru/",
       name: "SMM-Agents",
+      alternateName: ["SMM Agents", "smm-agents.ru"],
       description:
         "ИИ-кабинет для Telegram и VK: план постов, автопубликация и боты комментариев",
       inLanguage: "ru-RU",
       publisher: { "@id": "https://smm-agents.ru/#org" },
+      image: "https://smm-agents.ru/logo-512.png",
     },
     {
       "@type": "Organization",
       "@id": "https://smm-agents.ru/#org",
       name: "SMM-Agents",
+      legalName: "SMM-Agents",
       url: "https://smm-agents.ru/",
       logo: {
         "@type": "ImageObject",
-        url: "https://smm-agents.ru/icon-512.png",
+        "@id": "https://smm-agents.ru/#logo",
+        url: "https://smm-agents.ru/logo-512.png",
+        contentUrl: "https://smm-agents.ru/logo-512.png",
+        width: 512,
+        height: 512,
+        caption: "SMM-Agents",
       },
+      image: "https://smm-agents.ru/logo-512.png",
+      sameAs: ["https://smm-agents.ru"],
     },
     {
       "@type": "SoftwareApplication",
@@ -43,6 +54,7 @@ const jsonLd = {
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
       url: "https://smm-agents.ru/",
+      image: "https://smm-agents.ru/logo-512.png",
       description:
         "Сервис для генерации и публикации постов в Telegram и VK, а также автоответов на комментарии с помощью FAQ или ИИ",
       offers: {
@@ -51,6 +63,7 @@ const jsonLd = {
         priceCurrency: "RUB",
         description: "Регистрация и старт с пополнением баланса",
       },
+      publisher: { "@id": "https://smm-agents.ru/#org" },
     },
   ],
 };
@@ -65,7 +78,7 @@ export default function HomePage() {
       <header className={styles.nav}>
         <div className={`container ${styles.navInner}`}>
           <Link href="/" className={styles.logo}>
-            SMM-Agents
+            <BrandLogo />
           </Link>
           <nav className={styles.navLinks} aria-label="Разделы">
             <a href="#new">Новое</a>
@@ -281,7 +294,7 @@ export default function HomePage() {
 
       <footer className={styles.footer}>
         <div className={`container ${styles.footerInner}`}>
-          <span className={styles.logo}>SMM-Agents</span>
+          <BrandLogo />
           <nav className={styles.footerLinks} aria-label="Полезные страницы">
             <Link href="/guides/smm-bez-agentstva">Без агентства</Link>
             <Link href="/guides/ne-uspevayu-vesti-socseti">Нет времени</Link>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="SMM-Agents">
+  <title>SMM-Agents</title>
+  <!-- S curve -->
+  <path
+    fill="currentColor"
+    d="M30 8C18.4 8 11 14.2 11 23.2c0 6.6 4.2 10.6 12.6 12.8l8.2 2.1c4 .9 5.8 2.4 5.8 5.1 0 3.4-3.2 5.5-8.4 5.5-5.8 0-9.6-2.5-11.2-6.8l-7.8 3.2C12.8 52.4 19.6 58 30.4 58c11.2 0 18.2-5.8 18.2-14.6 0-6.8-4.2-11-13-13.2l-8.4-2.2c-3.4-.9-5-2.3-5-4.8 0-3.2 3-5.2 7.4-5.2 4.8 0 8 2.1 9.4 5.6l7-3.2C43.2 12.6 37.4 8 30 8Z"
+  />
+  <!-- A dark leg -->
+  <path fill="currentColor" d="M38.2 58 50.8 8h9.6L46.4 58H38.2Z" />
+  <!-- A lime accent -->
+  <path fill="#c8ff3d" d="M33.6 58 44.8 26h8.8L41.2 58h-7.6Z" />
+</svg>

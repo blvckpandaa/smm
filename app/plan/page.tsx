@@ -21,6 +21,7 @@ import {
 import { isValidWebsiteUrl, normalizeWebsiteUrl } from "@/lib/marketer/website";
 import { parseVkGroupId } from "@/lib/vk/parse-group-id";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
+import { BrandLogo } from "@/app/components/BrandLogo";
 import styles from "./plan.module.css";
 import { BotsPanel, type PublicBot, type PublicBotReply } from "./BotsPanel";
 
@@ -2057,7 +2058,7 @@ export default function PlanPage() {
       <header className={styles.top}>
         <div className={`container ${styles.topInner}`}>
           <Link href="/" className={styles.logo}>
-            SMM-Agents
+            <BrandLogo />
           </Link>
           <div className={styles.projectBar}>
             <ThemeToggle

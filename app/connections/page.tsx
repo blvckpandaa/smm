@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { BrandLogo } from "../components/BrandLogo";
 import styles from "./connections.module.css";
 
 export default function ConnectionsPage() {
@@ -8,7 +9,7 @@ export default function ConnectionsPage() {
       <header className={styles.top}>
         <div className={`container ${styles.topInner}`}>
           <Link href="/" className={styles.logo}>
-            SMM-Agents
+            <BrandLogo />
           </Link>
           <div className={styles.topActions}>
             <ThemeToggle />

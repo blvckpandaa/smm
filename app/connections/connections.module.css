@@ -25,10 +25,9 @@
 }
 
 .logo {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 1.25rem;
-  letter-spacing: -0.04em;
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
 }
 
 .wrap {
