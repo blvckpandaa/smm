@@ -22,14 +22,10 @@ export function SiteHeaderActions() {
   if (!loaded) {
     return (
       <div className={styles.headerActions}>
-        <nav className={styles.navLinks}>
-          <a href="#how">Как это работает</a>
-          <a href="#who">Кому подходит</a>
-        </nav>
         <ThemeToggle />
-        <span className="btn" style={{ opacity: 0.35, pointerEvents: "none" }}>
-          …
-        </span>
+        <Link href="/register" className="btn">
+          Начать бесплатно
+        </Link>
       </div>
     );
   }
@@ -79,9 +75,14 @@ export function HomeCtaButtons() {
 
   if (!loaded) {
     return (
-      <span className="btn" style={{ opacity: 0.35 }}>
-        …
-      </span>
+      <>
+        <Link href="/register" className="btn">
+          Создать аккаунт
+        </Link>
+        <a href="#how" className="btn btn-ghost">
+          Смотреть как
+        </a>
+      </>
     );
   }
 
@@ -147,7 +148,18 @@ export function HomeFinalCta() {
       .finally(() => setLoaded(true));
   }, []);
 
-  if (!loaded) return null;
+  if (!loaded) {
+    return (
+      <>
+        <Link href="/register" className="btn">
+          Создать аккаунт
+        </Link>
+        <Link href="/login" className="btn btn-ghost">
+          У меня уже есть аккаунт
+        </Link>
+      </>
+    );
+  }
 
   if (loggedIn) {
     return (

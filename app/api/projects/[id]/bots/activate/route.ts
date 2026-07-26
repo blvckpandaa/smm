@@ -1,8 +1,5 @@
 import { requireSession } from "@/lib/auth/request";
-import {
-  BOT_PERIOD_DAYS,
-  botPeriodPrice,
-} from "@/lib/billing/pricing";
+import { botPeriodPriceRuntime, getRuntimePricing } from "@/lib/billing/runtime-pricing";
 import { getAppUrl } from "@/lib/meta/config";
 import { setTelegramWebhook } from "@/lib/bots/telegram-reply";
 import {
@@ -49,12 +46,13 @@ export async function POST(req: Request, ctx: Ctx) {
       );
     }
 
-    const price = botPeriodPrice(channel);
+    const pricing = getRuntimePricing();
+    const price = botPeriodPriceRuntime(channel);
     const charge = chargeUserFixed({
       userId: auth.session.userId,
       amountRub: price,
       projectId: id,
-      description: `Бот ${channel}: активация ${BOT_PERIOD_DAYS} дн. · ${price} ₽`,
+      description: `Бот ${channel}: активация ${pricing.botPeriodDays} дн. · ${price} ₽`,
     });
     if (!charge.ok) {
       return Response.json(
@@ -69,7 +67,7 @@ export async function POST(req: Request, ctx: Ctx) {
 
     const current = getCommentBot(project, channel);
     const secrets = newBotSecrets();
-    const paidUntil = extendBotPaidUntil(current.paidUntil, BOT_PERIOD_DAYS);
+    const paidUntil = extendBotPaidUntil(current.paidUntil, pricing.botPeriodDays);
 
     const next = {
       ...current,

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BrandBrief, Channel, ContentPlan, PostGoal } from "@/lib/marketer";
 import type { PostDraft } from "@/lib/smm/types";
@@ -572,6 +573,7 @@ export default function PlanPage() {
   const [loaded, setLoaded] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [uiLang, setUiLang] = useState<UiLang>("ru");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [balanceRub, setBalanceRub] = useState(0);
   const [postPriceRub, setPostPriceRub] = useState(50);
   const [rewritePriceRub, setRewritePriceRub] = useState(25);
@@ -581,22 +583,7 @@ export default function PlanPage() {
   const [botFaqReplyRub, setBotFaqReplyRub] = useState(0);
   const [botAiReplyRub, setBotAiReplyRub] = useState(2);
   const [botPeriodDays, setBotPeriodDays] = useState(30);
-  const [topupPresets, setTopupPresets] = useState<number[]>([
-    100, 300, 500, 1000, 2000,
-  ]);
-  const [yookassaConfigured, setYookassaConfigured] = useState(false);
-  const [billingOpen, setBillingOpen] = useState(false);
-  const [topupAmount, setTopupAmount] = useState(500);
-  const [ledger, setLedger] = useState<
-    {
-      id: string;
-      type: string;
-      amountRub: number;
-      balanceAfter: number;
-      description: string;
-      createdAt: string;
-    }[]
-  >([]);
+  const router = useRouter();
   const t = dict[uiLang];
   const NAV = useMemo(() => navItemsFor(uiLang), [uiLang]);
   const navGroups = useMemo(
@@ -639,9 +626,6 @@ export default function PlanPage() {
       );
       setBotAiReplyRub(Number(data.botAiReplyRub) || 2);
       setBotPeriodDays(Number(data.botPeriodDays) || 30);
-      if (Array.isArray(data.topupPresets)) setTopupPresets(data.topupPresets);
-      setYookassaConfigured(Boolean(data.yookassaConfigured));
-      setLedger(Array.isArray(data.ledger) ? data.ledger : []);
       setUser((u) =>
         u ? { ...u, balanceRub: Number(data.balanceRub) || 0 } : u
       );
@@ -663,37 +647,8 @@ export default function PlanPage() {
     }
   }
 
-  async function topUpBalance(amount: number) {
-    setPending(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await fetch("/api/billing/topup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amountRub: amount }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Ошибка пополнения");
-      if (data.confirmationUrl) {
-        localStorage.setItem("smm-agents-pending-payment", data.paymentId || "");
-        window.location.href = data.confirmationUrl;
-        return;
-      }
-      if (typeof data.balanceRub === "number") setBalanceRub(data.balanceRub);
-      setNotice(
-        data.message ||
-          (uiLang === "en"
-            ? `Balance topped up by ${amount} ₽`
-            : `Баланс пополнен на ${amount} ₽`)
-      );
-      await refreshBilling();
-      setBillingOpen(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setPending(false);
-    }
+  function openBilling() {
+    router.push("/plan/billing");
   }
 
   const project = useMemo(
@@ -1107,12 +1062,13 @@ export default function PlanPage() {
   useEffect(() => {
     fetch("/api/auth")
       .then((r) => r.json())
-      .then((d: { user?: AuthUser | null }) => {
+      .then((d: { user?: AuthUser | null; isAdmin?: boolean }) => {
         if (!d.user) {
           window.location.href = "/login?next=/plan";
           return;
         }
         setUser(d.user);
+        setIsAdmin(Boolean(d.isAdmin));
         if (typeof d.user.balanceRub === "number") {
           setBalanceRub(d.user.balanceRub);
         }
@@ -1222,33 +1178,11 @@ export default function PlanPage() {
       setVkPickOpen(true);
       void loadVkGroups(vkProjectId || projectId || undefined);
     }
-    if (billing === "return") {
-      const paymentId = localStorage.getItem("smm-agents-pending-payment");
-      if (paymentId) {
-        void fetch("/api/billing/confirm", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paymentId }),
-        })
-          .then((r) => r.json())
-          .then((data) => {
-            if (typeof data.balanceRub === "number") {
-              setBalanceRub(data.balanceRub);
-            }
-            setNotice(
-              uiLang === "en"
-                ? "Payment checked. Balance updated if payment succeeded."
-                : "Платёж проверен. Баланс обновлён, если оплата прошла."
-            );
-            localStorage.removeItem("smm-agents-pending-payment");
-            void refreshBilling();
-          })
-          .catch(() => void refreshBilling());
-      } else {
-        void refreshBilling();
-      }
+    if (billing === "return" || billing === "crypto_ok") {
+      window.location.replace(`/plan/billing?billing=${billing}`);
+      return;
     }
-    if (metaError || metaOk || vkError || vkPick || stepParam || billing) {
+    if (metaError || metaOk || vkError || vkPick || stepParam) {
       window.history.replaceState({}, "", "/plan");
     }
   }, [refreshProjects, refreshBilling, projectId, uiLang]);
@@ -1343,7 +1277,7 @@ export default function PlanPage() {
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 402) {
-          setBillingOpen(true);
+          openBilling();
           if (typeof data.balanceRub === "number") setBalanceRub(data.balanceRub);
         }
         throw new Error(data.error || "Не удалось собрать план");
@@ -1442,7 +1376,7 @@ export default function PlanPage() {
           ? `Need ${imagePriceRub} ₽ for a new photo, balance ${balanceRub} ₽`
           : `Нужно ${imagePriceRub} ₽ за фото, на балансе ${balanceRub} ₽`
       );
-      setBillingOpen(true);
+      openBilling();
       return;
     }
     setBusyId(draftId);
@@ -1456,7 +1390,7 @@ export default function PlanPage() {
       const data = await res.json();
       if (!res.ok) {
         if (typeof data.balanceRub === "number") setBalanceRub(data.balanceRub);
-        if (res.status === 402) setBillingOpen(true);
+        if (res.status === 402) openBilling();
         throw new Error(data.error || "Не удалось сгенерировать фото");
       }
       if (typeof data.billing?.balanceRub === "number") {
@@ -1490,7 +1424,7 @@ export default function PlanPage() {
           ? `Need ${rewritePriceRub} ₽ to rewrite, balance ${balanceRub} ₽`
           : `Нужно ${rewritePriceRub} ₽ за переписывание, на балансе ${balanceRub} ₽`
       );
-      setBillingOpen(true);
+      openBilling();
       return;
     }
     setBusyId(draftId);
@@ -1504,7 +1438,7 @@ export default function PlanPage() {
       const data = await res.json();
       if (!res.ok) {
         if (typeof data.balanceRub === "number") setBalanceRub(data.balanceRub);
-        if (res.status === 402) setBillingOpen(true);
+        if (res.status === 402) openBilling();
         throw new Error(data.error || "Не удалось переписать текст");
       }
       if (typeof data.billing?.balanceRub === "number") {
@@ -2080,13 +2014,9 @@ export default function PlanPage() {
                 EN
               </button>
             </div>
-            <button
-              type="button"
+            <Link
+              href="/plan/billing"
               className={styles.balanceChip}
-              onClick={() => {
-                setBillingOpen(true);
-                void refreshBilling();
-              }}
               title={
                 uiLang === "en"
                   ? "Top up balance"
@@ -2097,7 +2027,12 @@ export default function PlanPage() {
                 {uiLang === "en" ? "Balance" : "Баланс"}
               </span>
               <strong>{balanceRub.toLocaleString(uiLang === "en" ? "en-US" : "ru-RU")} ₽</strong>
-            </button>
+            </Link>
+            {isAdmin && (
+              <Link href="/admin" className="btn btn-ghost">
+                {t.adminNav}
+              </Link>
+            )}
             {user && (
               <span className={styles.userChip}>
                 {user.name}
@@ -2785,7 +2720,7 @@ export default function PlanPage() {
                     disabled={pending}
                     onClick={() => {
                       if (balanceRub < brief.postsPerWeek * postPriceRub) {
-                        setBillingOpen(true);
+                        openBilling();
                         setError(
                           uiLang === "en"
                             ? `Need ${brief.postsPerWeek * postPriceRub} ₽, balance ${balanceRub} ₽`
@@ -2800,16 +2735,9 @@ export default function PlanPage() {
                       ? t.makingPlan
                       : `${t.makePlan} · ${brief.postsPerWeek * postPriceRub} ₽`}
                   </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => {
-                      setBillingOpen(true);
-                      void refreshBilling();
-                    }}
-                  >
+                  <Link href="/plan/billing" className="btn btn-ghost">
                     {uiLang === "en" ? "Top up" : "Пополнить"}
-                  </button>
+                  </Link>
                   <button
                     type="button"
                     className={`${styles.stepDanger} ${styles.mobileOnly}`}
@@ -4176,7 +4104,7 @@ export default function PlanPage() {
                 onBusy={setPending}
                 onError={setError}
                 onNotice={setNotice}
-                onNeedBilling={() => setBillingOpen(true)}
+                onNeedBilling={() => openBilling()}
                 onGoChannels={() => setStep("channels")}
                 onProject={(p) => {
                   const proj = p as PublicProject;
@@ -4351,137 +4279,6 @@ export default function PlanPage() {
 
         </>
       )}
-
-      {billingOpen && (
-            <div
-              className={styles.modalBackdrop}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="billing-title"
-            >
-              <div className={`${styles.modalCard} ${styles.billingCard}`}>
-                <h2 id="billing-title">
-                  {uiLang === "en" ? "Payment profile" : "Профиль оплаты"}
-                </h2>
-                <div className={styles.billingBalance}>
-                  <span>
-                    {uiLang === "en" ? "Current balance" : "Текущий баланс"}
-                  </span>
-                  <strong>
-                    {balanceRub.toLocaleString(
-                      uiLang === "en" ? "en-US" : "ru-RU"
-                    )}{" "}
-                    ₽
-                  </strong>
-                </div>
-                <p className={styles.modalHint}>
-                  {uiLang === "en"
-                    ? `${postPriceRub} ₽ per post. Rewrite — ${rewritePriceRub} ₽. Photo — ${imagePriceRub} ₽. Comment bots: ${botVkPeriodRub} ₽ / ${botPeriodDays} days; FAQ free; AI ${botAiReplyRub} ₽/reply.`
-                    : `${postPriceRub} ₽ за пост. Переписать — ${rewritePriceRub} ₽. Фото — ${imagePriceRub} ₽. Боты комментов: ${botVkPeriodRub} ₽ / ${botPeriodDays} дн.; FAQ бесплатно; ИИ ${botAiReplyRub} ₽/ответ.`}
-                </p>
-                {!yookassaConfigured && (
-                  <p className={styles.stubBanner}>
-                    {uiLang === "en"
-                      ? "YooKassa is not configured — top-ups go to demo balance."
-                      : "ЮKassa не настроена — пополнение идёт в демо-баланс."}
-                  </p>
-                )}
-                <div className={styles.billingSection}>
-                  <p className={styles.bizLabel}>
-                    {uiLang === "en" ? "Top up" : "Пополнить"}
-                  </p>
-                  <div className={styles.topupGrid}>
-                    {topupPresets.map((amount) => (
-                      <button
-                        key={amount}
-                        type="button"
-                        className={
-                          topupAmount === amount
-                            ? styles.typeOn
-                            : styles.typeChip
-                        }
-                        onClick={() => setTopupAmount(amount)}
-                      >
-                        {amount.toLocaleString(
-                          uiLang === "en" ? "en-US" : "ru-RU"
-                        )}{" "}
-                        ₽
-                      </button>
-                    ))}
-                  </div>
-                  <label className={styles.topupCustom}>
-                    <span>
-                      {uiLang === "en" ? "Custom amount" : "Своя сумма"}
-                    </span>
-                    <span className={styles.topupInputWrap}>
-                      <input
-                        type="number"
-                        min={50}
-                        max={100000}
-                        step={50}
-                        inputMode="numeric"
-                        value={topupAmount}
-                        onChange={(e) =>
-                          setTopupAmount(Number(e.target.value) || 50)
-                        }
-                      />
-                      <span className={styles.topupCurrency} aria-hidden>
-                        ₽
-                      </span>
-                    </span>
-                    <span className={styles.fieldHint}>
-                      {uiLang === "en"
-                        ? "Minimum 50 ₽"
-                        : "Минимум 50 ₽"}
-                    </span>
-                  </label>
-                </div>
-                {ledger.length > 0 && (
-                  <div className={styles.ledgerBox}>
-                    <p className={styles.bizLabel}>
-                      {uiLang === "en" ? "History" : "История"}
-                    </p>
-                    {ledger.slice(0, 6).map((row) => (
-                      <div key={row.id} className={styles.ledgerRow}>
-                        <span>
-                          {row.amountRub > 0 ? "+" : ""}
-                          {row.amountRub} ₽ — {row.description}
-                        </span>
-                        <span className={styles.cellSub}>
-                          {new Date(row.createdAt).toLocaleString(
-                            uiLang === "en" ? "en-US" : "ru-RU"
-                          )}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className={styles.modalActions}>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => setBillingOpen(false)}
-                  >
-                    {uiLang === "en" ? "Close" : "Закрыть"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={pending || topupAmount < 50}
-                    onClick={() => topUpBalance(topupAmount)}
-                  >
-                    {pending
-                      ? uiLang === "en"
-                        ? "Processing…"
-                        : "Оформляем…"
-                      : uiLang === "en"
-                        ? `Pay ${topupAmount.toLocaleString("en-US")} ₽`
-                        : `Оплатить ${topupAmount.toLocaleString("ru-RU")} ₽`}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
     </main>
   );

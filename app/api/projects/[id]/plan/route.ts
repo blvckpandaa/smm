@@ -1,6 +1,6 @@
 import { requireSession } from "@/lib/auth/request";
 import { buildContentPlan } from "@/lib/ai/deepseek";
-import { POST_PRICE_RUB } from "@/lib/billing/pricing";
+import { getRuntimePricing } from "@/lib/billing/runtime-pricing";
 import { resolvePostFrequency } from "@/lib/marketer/frequency";
 import { isValidTimeZone } from "@/lib/marketer/timezone";
 import { slotFromLocalInput } from "@/lib/schedule/pick-time";
@@ -78,6 +78,7 @@ export async function POST(req: Request, ctx: Ctx) {
   const { id } = await ctx.params;
   const project = getProjectForUser(id, auth.session.userId);
   if (!project) return Response.json({ error: "Проект не найден" }, { status: 404 });
+  const { postPriceRub } = getRuntimePricing();
 
   try {
     if (isPlanJobFresh(project.planJob)) {
@@ -93,7 +94,7 @@ export async function POST(req: Request, ctx: Ctx) {
               getUserById(auth.session.userId)?.balanceRub ??
               0,
             postsCount: project.planJob?.postsCount ?? 0,
-            postPriceRub: POST_PRICE_RUB,
+            postPriceRub,
           },
         },
         { status: 202 }
@@ -117,9 +118,9 @@ export async function POST(req: Request, ctx: Ctx) {
     const charge = chargeUserForPosts({
       userId: auth.session.userId,
       postsCount,
-      pricePerPost: POST_PRICE_RUB,
+      pricePerPost: postPriceRub,
       projectId: id,
-      description: `Маркетолог: план ${freq.postsPerDay}/день (${postsCount} постов) × ${POST_PRICE_RUB} ₽`,
+      description: `Маркетолог: план ${freq.postsPerDay}/день (${postsCount} постов) × ${postPriceRub} ₽`,
     });
     if (!charge.ok) {
       return Response.json(
@@ -128,7 +129,7 @@ export async function POST(req: Request, ctx: Ctx) {
           code: "INSUFFICIENT_BALANCE",
           balanceRub: charge.balanceRub,
           needRub: charge.needRub,
-          postPriceRub: POST_PRICE_RUB,
+          postPriceRub,
         },
         { status: 402 }
       );
@@ -173,7 +174,7 @@ export async function POST(req: Request, ctx: Ctx) {
           balanceRub: user?.balanceRub ?? charge.balanceRub,
           postsCount,
           postsPerDay: freq.postsPerDay,
-          postPriceRub: POST_PRICE_RUB,
+          postPriceRub,
         },
       },
       { status: 202 }

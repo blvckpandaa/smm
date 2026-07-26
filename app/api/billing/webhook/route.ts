@@ -2,6 +2,7 @@ import {
   creditUserBalance,
   findPendingTopUp,
   markTopUpSucceeded,
+  payReferrerOnTopup,
 } from "@/lib/store/projects";
 import { getYooPayment, isYooKassaConfigured } from "@/lib/billing/yookassa";
 
@@ -65,6 +66,11 @@ export async function POST(req: Request) {
       yooPaymentId: paymentId,
     });
     markTopUpSucceeded(paymentId);
+    payReferrerOnTopup({
+      payerUserId: userId,
+      amountRub,
+      paymentId,
+    });
 
     return Response.json({ ok: true });
   } catch {

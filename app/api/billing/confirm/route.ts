@@ -5,6 +5,7 @@ import {
   findPendingTopUp,
   getUserById,
   markTopUpSucceeded,
+  payReferrerOnTopup,
 } from "@/lib/store/projects";
 
 /** После return_url: проверить платёж и зачислить, если webhook ещё не пришёл */
@@ -45,6 +46,11 @@ export async function POST(req: Request) {
           yooPaymentId: body.paymentId,
         });
         markTopUpSucceeded(body.paymentId);
+        payReferrerOnTopup({
+          payerUserId: userId,
+          amountRub,
+          paymentId: body.paymentId,
+        });
       }
     }
 

@@ -5,6 +5,7 @@ import {
   sessionCookieOptions,
 } from "@/lib/auth/session";
 import { getSession } from "@/lib/auth/request";
+import { isAdminEmail } from "@/lib/auth/admin";
 import { getUserById, loginUser, registerUser } from "@/lib/store/projects";
 
 export async function GET() {
@@ -19,7 +20,9 @@ export async function GET() {
       email: session.email,
       name: session.name,
       balanceRub: 0,
+      referralCode: "",
     },
+    isAdmin: isAdminEmail(session.email),
   });
 }
 
@@ -30,6 +33,8 @@ export async function POST(req: Request) {
       email?: string;
       password?: string;
       name?: string;
+      promoCode?: string;
+      ref?: string;
     };
 
     if (body.action === "logout") {
@@ -44,6 +49,7 @@ export async function POST(req: Request) {
         email: body.email || "",
         password: body.password || "",
         name: body.name || "",
+        promoCode: body.promoCode || body.ref || "",
       });
       if (!result.ok) {
         return Response.json({ error: result.error }, { status: 400 });

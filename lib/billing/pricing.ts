@@ -36,3 +36,6 @@ export function botReplyPrice(mode: "faq" | "ai"): number {
 }
 
 export const TOPUP_PRESETS_RUB = [100, 300, 500, 1000, 2000] as const;
+
+/** Бонус на баланс при регистрации */
+export const NEW_USER_BONUS_RUB = 200;

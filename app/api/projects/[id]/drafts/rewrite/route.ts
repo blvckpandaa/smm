@@ -1,5 +1,5 @@
 import { requireSession } from "@/lib/auth/request";
-import { REWRITE_TEXT_PRICE_RUB } from "@/lib/billing/pricing";
+import { getRuntimePricing } from "@/lib/billing/runtime-pricing";
 import { rewriteOneDraft } from "@/lib/smm/writer";
 import {
   chargeUserFixed,
@@ -46,11 +46,12 @@ export async function POST(req: Request, ctx: Ctx) {
       );
     }
 
+    const { rewritePriceRub } = getRuntimePricing();
     const charge = chargeUserFixed({
       userId: auth.session.userId,
-      amountRub: REWRITE_TEXT_PRICE_RUB,
+      amountRub: rewritePriceRub,
       projectId: id,
-      description: `Переписать текст · ${REWRITE_TEXT_PRICE_RUB} ₽`,
+      description: `Переписать текст · ${rewritePriceRub} ₽`,
     });
     if (!charge.ok) {
       return Response.json(
@@ -58,7 +59,7 @@ export async function POST(req: Request, ctx: Ctx) {
           error: charge.error,
           balanceRub: charge.balanceRub,
           needRub: charge.needRub,
-          rewritePriceRub: REWRITE_TEXT_PRICE_RUB,
+          rewritePriceRub,
         },
         { status: 402 }
       );
@@ -98,7 +99,7 @@ export async function POST(req: Request, ctx: Ctx) {
       billing: {
         chargedRub,
         balanceRub: user?.balanceRub ?? charge.balanceRub,
-        rewritePriceRub: REWRITE_TEXT_PRICE_RUB,
+        rewritePriceRub,
       },
     });
   } catch (e) {

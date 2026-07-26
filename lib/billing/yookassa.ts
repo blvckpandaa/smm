@@ -124,5 +124,5 @@ export async function getYooPayment(paymentId: string): Promise<YooPayment> {
 }
 
 export function billingReturnUrl(): string {
-  return `${getAppUrl()}/plan?billing=return`;
+  return `${getAppUrl()}/plan/billing?billing=return`;
 }

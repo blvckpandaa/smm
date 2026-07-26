@@ -9,12 +9,12 @@ export function middleware(req: NextRequest) {
   if (!token) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", "/plan");
+    url.searchParams.set("next", req.nextUrl.pathname);
     return NextResponse.redirect(url);
   }
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/plan"],
+  matcher: ["/plan", "/plan/:path*", "/admin", "/admin/:path*"],
 };

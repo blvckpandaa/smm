@@ -21,7 +21,7 @@ export default function robots(): MetadataRoute.Robots {
           "/favicon-96x96.png",
           "/og.png",
         ],
-        disallow: ["/plan", "/connections", "/api/"],
+        disallow: ["/plan", "/admin", "/connections", "/api/"],
       },
     ],
     sitemap: `${base}/sitemap.xml`,

@@ -5,6 +5,18 @@ import type { BrandBrief, Channel, ContentPlan } from "@/lib/marketer/types";
 import type { PostDraft } from "@/lib/smm/types";
 import { hashPassword, verifyPassword } from "@/lib/auth/session";
 import {
+  BOT_AI_REPLY_RUB,
+  BOT_FAQ_REPLY_RUB,
+  BOT_PERIOD_DAYS,
+  BOT_TG_PERIOD_RUB,
+  BOT_VK_PERIOD_RUB,
+  NEW_USER_BONUS_RUB,
+  POST_PRICE_RUB,
+  REGENERATE_IMAGE_PRICE_RUB,
+  REWRITE_TEXT_PRICE_RUB,
+  TOPUP_PRESETS_RUB,
+} from "@/lib/billing/pricing";
+import {
   defaultCommentBot,
   toPublicCommentBot,
   type BotChannel,
@@ -44,6 +56,26 @@ export type User = {
   createdAt: string;
   /** Баланс в рублях */
   balanceRub: number;
+  /** Персональный промокод / реф-код */
+  referralCode: string;
+  /** Кто пригласил (userId) */
+  referredByUserId?: string;
+  /** Какой промокод ввёл при регистрации */
+  promoCodeUsed?: string;
+};
+
+export type StoreSettings = {
+  newUserBonusRub: number;
+  referralPercent: number;
+  postPriceRub: number;
+  rewritePriceRub: number;
+  imagePriceRub: number;
+  botVkPeriodRub: number;
+  botTgPeriodRub: number;
+  botAiReplyRub: number;
+  botFaqReplyRub: number;
+  botPeriodDays: number;
+  topupPresetsRub: number[];
 };
 
 export type PendingTopUp = {
@@ -206,12 +238,13 @@ export type TrashedProject = Project & {
 };
 
 type StoreFile = {
-  version: 4;
+  version: 5;
   users: User[];
   projects: Project[];
   trash: TrashedProject[];
   ledger: LedgerEntry[];
   pendingTopUps: PendingTopUp[];
+  settings?: StoreSettings;
   pendingVkAuth?: PendingVkAuth[];
   pendingVkOAuth?: PendingVkOAuthFlow[];
   pendingVkCommunity?: PendingVkCommunityFlow[];
@@ -246,18 +279,102 @@ function defaultBrief(name = ""): BrandBrief {
   };
 }
 
+function defaultSettings(): StoreSettings {
+  return {
+    newUserBonusRub: NEW_USER_BONUS_RUB,
+    referralPercent: 10,
+    postPriceRub: POST_PRICE_RUB,
+    rewritePriceRub: REWRITE_TEXT_PRICE_RUB,
+    imagePriceRub: REGENERATE_IMAGE_PRICE_RUB,
+    botVkPeriodRub: BOT_VK_PERIOD_RUB,
+    botTgPeriodRub: BOT_TG_PERIOD_RUB,
+    botAiReplyRub: BOT_AI_REPLY_RUB,
+    botFaqReplyRub: BOT_FAQ_REPLY_RUB,
+    botPeriodDays: BOT_PERIOD_DAYS,
+    topupPresetsRub: [...TOPUP_PRESETS_RUB],
+  };
+}
+
 function emptyStore(): StoreFile {
   return {
-    version: 4,
+    version: 5,
     users: [],
     projects: [],
     trash: [],
     ledger: [],
     pendingTopUps: [],
+    settings: defaultSettings(),
     pendingVkAuth: [],
     pendingVkOAuth: [],
     pendingVkCommunity: [],
     pendingVkUser: [],
+  };
+}
+
+function normalizeReferralCode(raw: string): string {
+  return raw.trim().toUpperCase().replace(/\s+/g, "");
+}
+
+function generateReferralCode(existing: Set<string>): string {
+  for (let i = 0; i < 40; i++) {
+    const code = `SA-${randomBytes(3).toString("hex").toUpperCase()}`;
+    if (!existing.has(code)) return code;
+  }
+  return `SA-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+}
+
+function mergeSettings(partial?: Partial<StoreSettings> | null): StoreSettings {
+  const base = defaultSettings();
+  if (!partial) return base;
+  return {
+    newUserBonusRub:
+      typeof partial.newUserBonusRub === "number"
+        ? Math.max(0, Math.round(partial.newUserBonusRub))
+        : base.newUserBonusRub,
+    referralPercent:
+      typeof partial.referralPercent === "number"
+        ? Math.min(50, Math.max(0, partial.referralPercent))
+        : base.referralPercent,
+    postPriceRub:
+      typeof partial.postPriceRub === "number"
+        ? Math.max(0, Math.round(partial.postPriceRub))
+        : base.postPriceRub,
+    rewritePriceRub:
+      typeof partial.rewritePriceRub === "number"
+        ? Math.max(0, Math.round(partial.rewritePriceRub))
+        : base.rewritePriceRub,
+    imagePriceRub:
+      typeof partial.imagePriceRub === "number"
+        ? Math.max(0, Math.round(partial.imagePriceRub))
+        : base.imagePriceRub,
+    botVkPeriodRub:
+      typeof partial.botVkPeriodRub === "number"
+        ? Math.max(0, Math.round(partial.botVkPeriodRub))
+        : base.botVkPeriodRub,
+    botTgPeriodRub:
+      typeof partial.botTgPeriodRub === "number"
+        ? Math.max(0, Math.round(partial.botTgPeriodRub))
+        : base.botTgPeriodRub,
+    botAiReplyRub:
+      typeof partial.botAiReplyRub === "number"
+        ? Math.max(0, Math.round(partial.botAiReplyRub))
+        : base.botAiReplyRub,
+    botFaqReplyRub:
+      typeof partial.botFaqReplyRub === "number"
+        ? Math.max(0, Math.round(partial.botFaqReplyRub))
+        : base.botFaqReplyRub,
+    botPeriodDays:
+      typeof partial.botPeriodDays === "number"
+        ? Math.max(1, Math.round(partial.botPeriodDays))
+        : base.botPeriodDays,
+    topupPresetsRub: (() => {
+      if (!Array.isArray(partial.topupPresetsRub)) return base.topupPresetsRub;
+      const next = partial.topupPresetsRub
+        .map((n) => Math.round(Number(n)))
+        .filter((n) => n >= 50 && n <= 100_000)
+        .slice(0, 12);
+      return next.length ? next : base.topupPresetsRub;
+    })(),
   };
 }
 
@@ -275,6 +392,7 @@ function ensureStore(): StoreFile {
       trash?: TrashedProject[];
       ledger?: LedgerEntry[];
       pendingTopUps?: PendingTopUp[];
+      settings?: Partial<StoreSettings>;
       pendingVkAuth?: PendingVkAuth[];
       pendingVkOAuth?: PendingVkOAuthFlow[];
       pendingVkCommunity?: PendingVkCommunityFlow[];
@@ -289,6 +407,7 @@ function ensureStore(): StoreFile {
     if (!parsed.pendingVkOAuth) parsed.pendingVkOAuth = [];
     if (!parsed.pendingVkCommunity) parsed.pendingVkCommunity = [];
     if (!parsed.pendingVkUser) parsed.pendingVkUser = [];
+    parsed.settings = mergeSettings(parsed.settings);
     parsed.projects = parsed.projects.map((p) => ({
       ...p,
       userId: (p as Project).userId || "",
@@ -297,13 +416,35 @@ function ensureStore(): StoreFile {
         ? (p as Project).botReplies
         : [],
     }));
-    parsed.users = parsed.users.map((u) => ({
-      ...u,
-      balanceRub:
-        typeof (u as User).balanceRub === "number" ? (u as User).balanceRub : 0,
-    }));
-    parsed.version = 4;
-    return parsed as StoreFile;
+    const codes = new Set<string>();
+    let usersMigrated = false;
+    parsed.users = parsed.users.map((u) => {
+      let referralCode = (u as User).referralCode
+        ? normalizeReferralCode((u as User).referralCode)
+        : "";
+      if (!referralCode || codes.has(referralCode)) {
+        referralCode = generateReferralCode(codes);
+        usersMigrated = true;
+      }
+      codes.add(referralCode);
+      if (!(u as User).referralCode) usersMigrated = true;
+      return {
+        ...u,
+        balanceRub:
+          typeof (u as User).balanceRub === "number"
+            ? (u as User).balanceRub
+            : 0,
+        referralCode,
+        referredByUserId: (u as User).referredByUserId || undefined,
+        promoCodeUsed: (u as User).promoCodeUsed || undefined,
+      };
+    });
+    parsed.version = 5;
+    const store = parsed as StoreFile;
+    if (usersMigrated || !parsed.settings || (parsed.version as number) < 5) {
+      saveStore(store);
+    }
+    return store;
   } catch {
     return emptyStore();
   }
@@ -326,6 +467,7 @@ export function registerUser(input: {
   email: string;
   password: string;
   name: string;
+  promoCode?: string;
 }): { ok: true; user: PublicUser } | { ok: false; error: string } {
   const email = normalizeEmail(input.email);
   const name = input.name.trim() || "Пользователь";
@@ -343,6 +485,27 @@ export function registerUser(input: {
     return { ok: false, error: "Этот email уже зарегистрирован" };
   }
 
+  const settings = mergeSettings(store.settings);
+  const promoRaw = input.promoCode ? normalizeReferralCode(input.promoCode) : "";
+  let referredByUserId: string | undefined;
+  let promoCodeUsed: string | undefined;
+  if (promoRaw) {
+    const referrer = store.users.find(
+      (u) => normalizeReferralCode(u.referralCode) === promoRaw
+    );
+    if (!referrer) {
+      return { ok: false, error: "Промокод не найден" };
+    }
+    if (referrer.email === email) {
+      return { ok: false, error: "Нельзя использовать свой промокод" };
+    }
+    referredByUserId = referrer.id;
+    promoCodeUsed = referrer.referralCode;
+  }
+
+  const existingCodes = new Set(
+    store.users.map((u) => normalizeReferralCode(u.referralCode))
+  );
   const user: User = {
     id: randomUUID(),
     email,
@@ -350,13 +513,33 @@ export function registerUser(input: {
     passwordHash: hashPassword(password),
     createdAt: new Date().toISOString(),
     balanceRub: 0,
+    referralCode: generateReferralCode(existingCodes),
+    referredByUserId,
+    promoCodeUsed,
   };
   store.users.push(user);
+  store.settings = settings;
   saveStore(store);
 
+  const bonusRub = settings.newUserBonusRub;
+  if (bonusRub > 0) {
+    creditUserBalance({
+      userId: user.id,
+      amountRub: bonusRub,
+      description: `Бонус за регистрацию ${bonusRub} ₽`,
+      yooPaymentId: `signup-bonus-${user.id}`,
+    });
+  }
+
+  const publicUser = getUserById(user.id);
   return {
     ok: true,
-    user: toPublicUser(user),
+    user:
+      publicUser ??
+      toPublicUser({
+        ...user,
+        balanceRub: bonusRub,
+      }),
   };
 }
 
@@ -388,6 +571,8 @@ export type PublicUser = {
   name: string;
   createdAt: string;
   balanceRub: number;
+  referralCode: string;
+  referredByUserId?: string;
 };
 
 function toPublicUser(user: User): PublicUser {
@@ -397,6 +582,8 @@ function toPublicUser(user: User): PublicUser {
     name: user.name,
     createdAt: user.createdAt,
     balanceRub: Math.round((user.balanceRub || 0) * 100) / 100,
+    referralCode: user.referralCode,
+    referredByUserId: user.referredByUserId,
   };
 }
 
@@ -410,6 +597,356 @@ export function listLedgerForUser(userId: string, limit = 20): LedgerEntry[] {
     .ledger.filter((e) => e.userId === userId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, limit);
+}
+
+export function getSettings(): StoreSettings {
+  const store = ensureStore();
+  const settings = mergeSettings(store.settings);
+  if (!store.settings) {
+    store.settings = settings;
+    saveStore(store);
+  }
+  return settings;
+}
+
+export function updateSettings(
+  patch: Partial<StoreSettings>
+): StoreSettings {
+  const store = ensureStore();
+  store.settings = mergeSettings({ ...mergeSettings(store.settings), ...patch });
+  saveStore(store);
+  return store.settings;
+}
+
+export function findUserByReferralCode(code: string): User | null {
+  const normalized = normalizeReferralCode(code);
+  if (!normalized) return null;
+  return (
+    ensureStore().users.find(
+      (u) => normalizeReferralCode(u.referralCode) === normalized
+    ) ?? null
+  );
+}
+
+export function listUsersAdmin(): {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: string;
+  balanceRub: number;
+  referralCode: string;
+  referredByUserId?: string;
+  referredByEmail?: string;
+  invitedCount: number;
+  referralEarnedRub: number;
+}[] {
+  const store = ensureStore();
+  const byId = new Map(store.users.map((u) => [u.id, u]));
+  return store.users
+    .map((u) => {
+      const invitedCount = store.users.filter(
+        (x) => x.referredByUserId === u.id
+      ).length;
+      const referralEarnedRub = store.ledger
+        .filter(
+          (e) =>
+            e.userId === u.id &&
+            e.type === "adjust" &&
+            typeof e.yooPaymentId === "string" &&
+            e.yooPaymentId.startsWith("ref-")
+        )
+        .reduce((sum, e) => sum + Math.max(0, e.amountRub), 0);
+      const referrer = u.referredByUserId
+        ? byId.get(u.referredByUserId)
+        : undefined;
+      return {
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        createdAt: u.createdAt,
+        balanceRub: u.balanceRub,
+        referralCode: u.referralCode,
+        referredByUserId: u.referredByUserId,
+        referredByEmail: referrer?.email,
+        invitedCount,
+        referralEarnedRub: Math.round(referralEarnedRub * 100) / 100,
+      };
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function listLedgerAdmin(limit = 50): (LedgerEntry & {
+  userEmail?: string;
+  userName?: string;
+})[] {
+  const store = ensureStore();
+  const byId = new Map(store.users.map((u) => [u.id, u]));
+  return store.ledger
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit)
+    .map((e) => {
+      const u = byId.get(e.userId);
+      return {
+        ...e,
+        userEmail: u?.email,
+        userName: u?.name,
+      };
+    });
+}
+
+export function getReferralOverview(): {
+  pairs: {
+    referrerId: string;
+    referrerEmail: string;
+    referrerName: string;
+    inviteeId: string;
+    inviteeEmail: string;
+    inviteeName: string;
+    inviteeCreatedAt: string;
+    earnedFromInviteeRub: number;
+  }[];
+  totalReferralPaidRub: number;
+  recentPayouts: LedgerEntry[];
+} {
+  const store = ensureStore();
+  const byId = new Map(store.users.map((u) => [u.id, u]));
+  const pairs = store.users
+    .filter((u) => u.referredByUserId)
+    .map((invitee) => {
+      const referrer = byId.get(invitee.referredByUserId!);
+      const earnedFromInviteeRub = store.ledger
+        .filter(
+          (e) =>
+            e.userId === invitee.referredByUserId &&
+            e.type === "adjust" &&
+            typeof e.yooPaymentId === "string" &&
+            e.yooPaymentId.startsWith(`ref-`) &&
+            e.description.includes(invitee.email)
+        )
+        .reduce((sum, e) => sum + Math.max(0, e.amountRub), 0);
+      // Fallback: match by payment chain is hard; sum all ref payouts for referrer from this invitee's topups via description containing invitee name/email
+      return {
+        referrerId: invitee.referredByUserId!,
+        referrerEmail: referrer?.email || "",
+        referrerName: referrer?.name || "",
+        inviteeId: invitee.id,
+        inviteeEmail: invitee.email,
+        inviteeName: invitee.name,
+        inviteeCreatedAt: invitee.createdAt,
+        earnedFromInviteeRub: Math.round(earnedFromInviteeRub * 100) / 100,
+      };
+    })
+    .sort((a, b) => b.inviteeCreatedAt.localeCompare(a.inviteeCreatedAt));
+
+  const recentPayouts = store.ledger
+    .filter(
+      (e) =>
+        e.type === "adjust" &&
+        typeof e.yooPaymentId === "string" &&
+        e.yooPaymentId.startsWith("ref-")
+    )
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 40);
+
+  const totalReferralPaidRub =
+    Math.round(
+      recentPayouts.reduce((s, e) => s + Math.max(0, e.amountRub), 0) * 100
+    ) / 100;
+
+  // Better total: all ref payouts not just recent
+  const allRef = store.ledger.filter(
+    (e) =>
+      e.type === "adjust" &&
+      typeof e.yooPaymentId === "string" &&
+      e.yooPaymentId.startsWith("ref-")
+  );
+  const totalAll =
+    Math.round(allRef.reduce((s, e) => s + Math.max(0, e.amountRub), 0) * 100) /
+    100;
+
+  return {
+    pairs,
+    totalReferralPaidRub: totalAll,
+    recentPayouts,
+  };
+}
+
+export function getMyReferralStats(userId: string): {
+  referralCode: string;
+  referralPercent: number;
+  invitedCount: number;
+  earnedRub: number;
+  invitees: { id: string; name: string; email: string; createdAt: string }[];
+} {
+  const store = ensureStore();
+  const user = store.users.find((u) => u.id === userId);
+  const settings = mergeSettings(store.settings);
+  const invitees = store.users
+    .filter((u) => u.referredByUserId === userId)
+    .map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      createdAt: u.createdAt,
+    }))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const earnedRub =
+    Math.round(
+      store.ledger
+        .filter(
+          (e) =>
+            e.userId === userId &&
+            e.type === "adjust" &&
+            typeof e.yooPaymentId === "string" &&
+            e.yooPaymentId.startsWith("ref-")
+        )
+        .reduce((sum, e) => sum + Math.max(0, e.amountRub), 0) * 100
+    ) / 100;
+
+  return {
+    referralCode: user?.referralCode || "",
+    referralPercent: settings.referralPercent,
+    invitedCount: invitees.length,
+    earnedRub,
+    invitees,
+  };
+}
+
+/** Начислить рефереру % с успешного пополнения приглашённого. */
+export function payReferrerOnTopup(input: {
+  payerUserId: string;
+  amountRub: number;
+  paymentId: string;
+}):
+  | { ok: true; paidRub: number; referrerId?: string }
+  | { ok: false; error: string } {
+  const paymentId = input.paymentId?.trim();
+  const amountRub = Math.round(input.amountRub);
+  if (!paymentId || amountRub <= 0) {
+    return { ok: false, error: "bad amount" };
+  }
+  if (
+    paymentId.startsWith("signup-bonus-") ||
+    paymentId.startsWith("ref-")
+  ) {
+    return { ok: true, paidRub: 0 };
+  }
+
+  const store = ensureStore();
+  const payer = store.users.find((u) => u.id === input.payerUserId);
+  if (!payer?.referredByUserId) {
+    return { ok: true, paidRub: 0 };
+  }
+  if (payer.referredByUserId === payer.id) {
+    return { ok: true, paidRub: 0 };
+  }
+
+  const settings = mergeSettings(store.settings);
+  const percent = settings.referralPercent;
+  if (percent <= 0) {
+    return { ok: true, paidRub: 0 };
+  }
+
+  const paidRub = Math.round((amountRub * percent) / 100);
+  if (paidRub <= 0) {
+    return { ok: true, paidRub: 0 };
+  }
+
+  const refPaymentId = `ref-${paymentId}`;
+  const already = store.ledger.find(
+    (e) => e.yooPaymentId === refPaymentId && e.type === "adjust"
+  );
+  if (already) {
+    return {
+      ok: true,
+      paidRub: already.amountRub,
+      referrerId: payer.referredByUserId,
+    };
+  }
+
+  const result = creditOrDebit({
+    userId: payer.referredByUserId,
+    amountRub: paidRub,
+    type: "adjust",
+    description: `Реферальное вознаграждение ${percent}% с пополнения ${payer.email} (${amountRub} ₽)`,
+    yooPaymentId: refPaymentId,
+  });
+
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+  return {
+    ok: true,
+    paidRub,
+    referrerId: payer.referredByUserId,
+  };
+}
+
+export function adminAdjustBalance(input: {
+  userId: string;
+  amountRub: number;
+  description?: string;
+}):
+  | { ok: true; balanceRub: number; entry: LedgerEntry }
+  | { ok: false; error: string; balanceRub: number } {
+  const amountRub = Math.round(input.amountRub * 100) / 100;
+  if (!amountRub) {
+    return {
+      ok: false,
+      error: "Сумма не должна быть 0",
+      balanceRub: getUserBalance(input.userId),
+    };
+  }
+  return creditOrDebit({
+    userId: input.userId,
+    amountRub,
+    type: "adjust",
+    description:
+      input.description?.trim() ||
+      (amountRub > 0
+        ? `Корректировка админом +${amountRub} ₽`
+        : `Корректировка админом ${amountRub} ₽`),
+    yooPaymentId: `admin-adjust-${randomUUID()}`,
+  });
+}
+
+export function getAdminDashboardStats(): {
+  usersCount: number;
+  balanceSumRub: number;
+  topupMonthRub: number;
+  chargeMonthRub: number;
+  referralPaidMonthRub: number;
+} {
+  const store = ensureStore();
+  const now = new Date();
+  const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  let topupMonthRub = 0;
+  let chargeMonthRub = 0;
+  let referralPaidMonthRub = 0;
+  for (const e of store.ledger) {
+    if (!e.createdAt.startsWith(monthPrefix)) continue;
+    if (e.type === "topup" && e.amountRub > 0) topupMonthRub += e.amountRub;
+    if (e.type === "charge" && e.amountRub < 0)
+      chargeMonthRub += Math.abs(e.amountRub);
+    if (
+      e.type === "adjust" &&
+      e.yooPaymentId?.startsWith("ref-") &&
+      e.amountRub > 0
+    ) {
+      referralPaidMonthRub += e.amountRub;
+    }
+  }
+  return {
+    usersCount: store.users.length,
+    balanceSumRub:
+      Math.round(
+        store.users.reduce((s, u) => s + (u.balanceRub || 0), 0) * 100
+      ) / 100,
+    topupMonthRub: Math.round(topupMonthRub * 100) / 100,
+    chargeMonthRub: Math.round(chargeMonthRub * 100) / 100,
+    referralPaidMonthRub: Math.round(referralPaidMonthRub * 100) / 100,
+  };
 }
 
 function creditOrDebit(input: {

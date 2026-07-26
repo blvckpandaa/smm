@@ -1,5 +1,5 @@
 import { requireSession } from "@/lib/auth/request";
-import { REGENERATE_IMAGE_PRICE_RUB } from "@/lib/billing/pricing";
+import { getRuntimePricing } from "@/lib/billing/runtime-pricing";
 import { buildImagePrompt, generateImageBytes } from "@/lib/ai/image";
 import { saveProjectImage } from "@/lib/media/store";
 import {
@@ -35,11 +35,12 @@ export async function POST(req: Request, ctx: Ctx) {
       return Response.json({ error: "Черновик не найден" }, { status: 404 });
     }
 
+    const { imagePriceRub } = getRuntimePricing();
     const charge = chargeUserFixed({
       userId: auth.session.userId,
-      amountRub: REGENERATE_IMAGE_PRICE_RUB,
+      amountRub: imagePriceRub,
       projectId: id,
-      description: `Фото поста · ${REGENERATE_IMAGE_PRICE_RUB} ₽`,
+      description: `Фото поста · ${imagePriceRub} ₽`,
     });
     if (!charge.ok) {
       return Response.json(
@@ -47,7 +48,7 @@ export async function POST(req: Request, ctx: Ctx) {
           error: charge.error,
           balanceRub: charge.balanceRub,
           needRub: charge.needRub,
-          imagePriceRub: REGENERATE_IMAGE_PRICE_RUB,
+          imagePriceRub,
         },
         { status: 402 }
       );
@@ -79,7 +80,7 @@ export async function POST(req: Request, ctx: Ctx) {
       billing: {
         chargedRub,
         balanceRub: user?.balanceRub ?? charge.balanceRub,
-        imagePriceRub: REGENERATE_IMAGE_PRICE_RUB,
+        imagePriceRub,
       },
     });
   } catch (e) {

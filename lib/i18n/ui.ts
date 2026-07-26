@@ -26,7 +26,7 @@ export const dict = {
     logout: "Выйти",
     cabinetTitle: "Кабинет SMM-Agents",
     cabinetLead:
-      "Создайте бизнес — откроется стол с постами, расписанием, каналами и ботами комментариев.",
+      "Создайте бизнес — стол с постами, каналами и ботами. Новым аккаунтам бонус на баланс; делитесь промокодом и получайте % с пополнений друзей.",
     businessNamePh: "Название бизнеса",
     createBusiness: "Создать бизнес",
     trash: "Корзина",
@@ -203,6 +203,11 @@ export const dict = {
     chatId: "Chat ID канала или группы",
     vkToken: "Токен сообщества",
     vkGroup: "ID группы",
+    referralTitle: "Реферальный промокод",
+    referralLead:
+      "Друг регистрируется по вашему коду — вы получаете процент с его пополнений.",
+    promoCodeOptional: "Промокод (если есть)",
+    adminNav: "Админка",
     uiLang: "Язык",
     other: "Другое",
   },
@@ -211,7 +216,7 @@ export const dict = {
     logout: "Log out",
     cabinetTitle: "SMM-Agents cabinet",
     cabinetLead:
-      "Create a business — workspace with posts, schedule, channels, and comment bots.",
+      "Create a business — posts, channels and bots. New accounts get a balance bonus; share your promo code and earn % of friends' top-ups.",
     businessNamePh: "Business name",
     createBusiness: "Create business",
     trash: "Trash",
@@ -387,6 +392,11 @@ export const dict = {
     chatId: "Channel or group Chat ID",
     vkToken: "Community token",
     vkGroup: "Group ID",
+    referralTitle: "Referral promo code",
+    referralLead:
+      "A friend signs up with your code — you earn a percent of their top-ups.",
+    promoCodeOptional: "Promo code (optional)",
+    adminNav: "Admin",
     uiLang: "Language",
     other: "Other",
   },

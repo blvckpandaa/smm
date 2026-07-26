@@ -167,8 +167,8 @@ p {
 
 @keyframes rise {
   from {
-    opacity: 0;
-    transform: translateY(18px);
+    opacity: 1;
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -196,17 +196,26 @@ p {
 }
 
 .rise {
-  animation: rise 0.8s ease both;
+  animation: rise 0.55s ease both;
 }
 
 .rise-delay-1 {
-  animation-delay: 0.12s;
+  animation-delay: 0.08s;
 }
 
 .rise-delay-2 {
-  animation-delay: 0.24s;
+  animation-delay: 0.14s;
 }
 
 .rise-delay-3 {
-  animation-delay: 0.36s;
+  animation-delay: 0.2s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .rise-delay-1,
+  .rise-delay-2,
+  .rise-delay-3 {
+    animation: none;
+  }
 }

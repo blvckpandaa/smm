@@ -94,25 +94,25 @@ export default function HomePage() {
         <div className={styles.heroGrain} aria-hidden />
         <div className={`container ${styles.heroInner}`}>
           <div className={styles.heroBrandBlock}>
-            <p className={`eyebrow rise`}>ИИ-агент для соцсетей · smm-agents.ru</p>
-            <h1 className={`${styles.brand} rise rise-delay-1`}>SMM-Agents</h1>
+            <p className="eyebrow">ИИ-агент для соцсетей · smm-agents.ru</p>
+            <h1 className={styles.brand}>SMM-Agents</h1>
           </div>
 
           <div className={styles.heroGrid}>
             <div className={styles.heroCopy}>
-              <p className={`${styles.headline} rise rise-delay-2`}>
+              <p className={styles.headline}>
                 Посты, расписание и ответы на комментарии — в одном кабинете
               </p>
-              <p className={`${styles.lead} rise rise-delay-2`}>
+              <p className={styles.lead}>
                 Агент пишет контент для Telegram и VK, публикует по плану и
                 отвечает в комментариях: FAQ или ИИ.
               </p>
-              <div className={`${styles.ctaRow} rise rise-delay-3`}>
+              <div className={styles.ctaRow}>
                 <HomeCtaButtons />
               </div>
             </div>
 
-            <div className={`${styles.heroVisual} rise rise-delay-2`} aria-hidden>
+            <div className={styles.heroVisual} aria-hidden>
               <div className={styles.timeline}>
                 <div className={styles.timelineHead}>
                   <span>Сегодня в ленте</span>

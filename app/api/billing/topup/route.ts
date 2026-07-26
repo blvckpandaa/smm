@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { requireSession } from "@/lib/auth/request";
-import { TOPUP_PRESETS_RUB } from "@/lib/billing/pricing";
+import { getCryptoAsset } from "@/lib/billing/crypto-assets";
+import {
+  createCryptomusInvoice,
+  isCryptomusConfigured,
+  newCryptoOrderId,
+} from "@/lib/billing/cryptomus";
+import { getRuntimePricing } from "@/lib/billing/runtime-pricing";
 import {
   billingReturnUrl,
   createYooPayment,
@@ -9,17 +15,40 @@ import {
 import {
   creditUserBalance,
   getUserById,
+  payReferrerOnTopup,
   savePendingTopUp,
 } from "@/lib/store/projects";
 
-/** Создать пополнение: ЮKassa redirect или демо-зачисление без ключей */
+type TopupMethod = "card" | "crypto";
+
+/** Создать пополнение: карта (ЮKassa) или крипта (Cryptomus) */
 export async function POST(req: Request) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
 
   try {
-    const body = (await req.json()) as { amountRub?: number };
+    const body = (await req.json()) as {
+      amountRub?: number;
+      method?: TopupMethod;
+      cryptoAsset?: string;
+    };
     const amountRub = Math.round(Number(body.amountRub) || 0);
+    const method: TopupMethod =
+      body.method === "crypto" ? "crypto" : "card";
+    const asset =
+      method === "crypto" ? getCryptoAsset(body.cryptoAsset) : null;
+    const presets = getRuntimePricing().topupPresetsRub;
+
+    if (method === "crypto" && !asset) {
+      return Response.json(
+        {
+          error:
+            "Выберите криптовалюту: BTC, USDT (TRC-20 / TON / BEP-20), TON или ETH.",
+        },
+        { status: 400 }
+      );
+    }
+
     if (amountRub < 50 || amountRub > 100_000) {
       return Response.json(
         { error: "Сумма пополнения: от 50 до 100 000 ₽" },
@@ -32,8 +61,76 @@ export async function POST(req: Request) {
       return Response.json({ error: "Пользователь не найден" }, { status: 404 });
     }
 
+    if (method === "crypto") {
+      if (!isCryptomusConfigured()) {
+        if (
+          process.env.NODE_ENV === "production" &&
+          process.env.ALLOW_DEMO_TOPUP !== "1"
+        ) {
+          return Response.json(
+            {
+              error:
+                "Крипто-оплата пока не настроена. Выберите карту/СБП или напишите в поддержку.",
+            },
+            { status: 503 }
+          );
+        }
+        const paymentId = `demo-crypto-${randomUUID()}`;
+        const assetLabel = asset
+          ? `${asset.symbol} (${asset.networkLabel})`
+          : "крипта";
+        const credited = creditUserBalance({
+          userId: auth.session.userId,
+          amountRub,
+          description: `Демо-пополнение ${assetLabel} ${amountRub} ₽`,
+          yooPaymentId: paymentId,
+        });
+        if (!credited.ok) {
+          return Response.json({ error: credited.error }, { status: 400 });
+        }
+        payReferrerOnTopup({
+          payerUserId: auth.session.userId,
+          amountRub,
+          paymentId,
+        });
+        return Response.json({
+          ok: true,
+          demo: true,
+          method: "crypto",
+          cryptoAsset: asset?.id ?? null,
+          balanceRub: credited.balanceRub,
+          message: `Баланс пополнен на ${amountRub} ₽ (демо без Cryptomus)`,
+          presets,
+        });
+      }
+
+      const orderId = newCryptoOrderId();
+      const invoice = await createCryptomusInvoice({
+        amountRub,
+        orderId,
+        userId: auth.session.userId,
+        asset,
+      });
+
+      savePendingTopUp({
+        userId: auth.session.userId,
+        amountRub,
+        yooPaymentId: orderId,
+      });
+
+      return Response.json({
+        ok: true,
+        method: "crypto",
+        cryptoAsset: asset?.id ?? null,
+        paymentId: invoice.uuid,
+        orderId,
+        confirmationUrl: invoice.url,
+        amountRub,
+        presets,
+      });
+    }
+
     if (!isYooKassaConfigured()) {
-      // В проде демо-зачисление запрещено (иначе любой юзер может накрутить баланс)
       if (
         process.env.NODE_ENV === "production" &&
         process.env.ALLOW_DEMO_TOPUP !== "1"
@@ -43,20 +140,28 @@ export async function POST(req: Request) {
           { status: 503 }
         );
       }
+      const paymentId = `demo-${randomUUID()}`;
       const credited = creditUserBalance({
         userId: auth.session.userId,
         amountRub,
         description: `Демо-пополнение ${amountRub} ₽ (ЮKassa не настроена)`,
-        yooPaymentId: `demo-${randomUUID()}`,
+        yooPaymentId: paymentId,
       });
       if (!credited.ok) {
         return Response.json({ error: credited.error }, { status: 400 });
       }
+      payReferrerOnTopup({
+        payerUserId: auth.session.userId,
+        amountRub,
+        paymentId,
+      });
       return Response.json({
         ok: true,
         demo: true,
+        method: "card",
         balanceRub: credited.balanceRub,
         message: `Баланс пополнен на ${amountRub} ₽ (тестовый режим без ЮKassa)`,
+        presets,
       });
     }
 
@@ -88,10 +193,11 @@ export async function POST(req: Request) {
 
     return Response.json({
       ok: true,
+      method: "card",
       paymentId: payment.id,
       confirmationUrl: url,
       amountRub,
-      presets: TOPUP_PRESETS_RUB,
+      presets,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Ошибка оплаты";

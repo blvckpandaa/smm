@@ -7,7 +7,7 @@ import {
   type BotReplyMode,
   type CommentBot,
 } from "@/lib/bots/types";
-import { botReplyPrice } from "@/lib/billing/pricing";
+import { botReplyPriceRuntime } from "@/lib/billing/runtime-pricing";
 import type { BrandBrief } from "@/lib/marketer/types";
 import {
   appendBotReplyLog,
@@ -99,7 +99,7 @@ export async function chargeAndSendBotReply(input: {
     return { ok: true, skipped: true, error: built.reason };
   }
 
-  const price = botReplyPrice(built.mode);
+  const price = botReplyPriceRuntime(built.mode);
   const charge = chargeUserFixed({
     userId: project.userId,
     amountRub: price,

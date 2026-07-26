@@ -1,25 +1,41 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { BrandLogo } from "../components/BrandLogo";
 import styles from "../auth.module.css";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [promoCode, setPromoCode] = useState("");
+  const [bonusRub, setBonusRub] = useState(200);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    const ref = searchParams.get("ref") || searchParams.get("promo");
+    if (ref) setPromoCode(ref.toUpperCase());
+  }, [searchParams]);
 
   useEffect(() => {
     fetch("/api/auth")
       .then((r) => r.json())
       .then((d: { user?: unknown }) => {
         if (d.user) router.replace("/plan");
+      })
+      .catch(() => undefined);
+    fetch("/api/public/pricing")
+      .then((r) => r.json())
+      .then((d: { newUserBonusRub?: number }) => {
+        if (typeof d.newUserBonusRub === "number") {
+          setBonusRub(d.newUserBonusRub);
+        }
       })
       .catch(() => undefined);
   }, [router]);
@@ -37,6 +53,7 @@ export default function RegisterPage() {
           name,
           email,
           password,
+          promoCode: promoCode.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -61,8 +78,9 @@ export default function RegisterPage() {
         </div>
         <h1 className={styles.title}>Создать аккаунт</h1>
         <p className={styles.lead}>
-          Зарегистрируйтесь, чтобы нанять агента и вести контент для своего
-          бизнеса.
+          Бонус {bonusRub.toLocaleString("ru-RU")} ₽ на баланс сразу после
+          регистрации. Есть промокод друга — введите ниже: он получит % с ваших
+          пополнений.
         </p>
 
         <form className={styles.form} onSubmit={onSubmit}>
@@ -99,6 +117,15 @@ export default function RegisterPage() {
               autoComplete="new-password"
             />
           </label>
+          <label>
+            Промокод (необязательно)
+            <input
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+              placeholder="SA-XXXXXX"
+              autoComplete="off"
+            />
+          </label>
 
           {error && <p className={styles.error}>{error}</p>}
 
@@ -112,5 +139,21 @@ export default function RegisterPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className={styles.page}>
+          <div className={styles.card}>
+            <p className={styles.lead}>Загрузка…</p>
+          </div>
+        </main>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
   );
 }
