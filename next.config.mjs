@@ -29,6 +29,8 @@ const nextConfig = {
       { source: "/favicon.ico", headers: longCache },
       { source: "/favicon-16x16.png", headers: longCache },
       { source: "/favicon-32x32.png", headers: longCache },
+      { source: "/favicon-48x48.png", headers: longCache },
+      { source: "/favicon-96x96.png", headers: longCache },
       { source: "/apple-icon.png", headers: longCache },
       { source: "/icon-192.png", headers: longCache },
       { source: "/icon-512.png", headers: longCache },
