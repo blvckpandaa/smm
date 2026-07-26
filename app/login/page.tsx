@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { BrandLogo } from "../components/BrandLogo";
+import { SignupBonusHint } from "../components/SignupBonusHint";
 import styles from "../auth.module.css";
 
 function LoginForm() {
@@ -56,8 +57,10 @@ function LoginForm() {
       </div>
       <h1 className={styles.title}>Вход</h1>
       <p className={styles.lead}>
-        Войдите, чтобы открыть кабинет и продолжить работу с агентом.
+        Войдите в кабинет. Ещё нет аккаунта — при регистрации дадим бонус на
+        баланс.
       </p>
+      <SignupBonusHint variant="banner" />
 
       <form className={styles.form} onSubmit={onSubmit}>
         <label>
@@ -90,7 +93,8 @@ function LoginForm() {
       </form>
 
       <p className={styles.footer}>
-        Нет аккаунта? <Link href="/register">Зарегистрироваться</Link>
+        Нет аккаунта?{" "}
+        <Link href="/register">Зарегистрироваться и получить бонус</Link>
       </p>
     </div>
   );

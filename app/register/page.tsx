@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { BrandLogo } from "../components/BrandLogo";
+import { SignupBonusHint } from "../components/SignupBonusHint";
 import styles from "../auth.module.css";
 
 function RegisterForm() {
@@ -14,7 +15,6 @@ function RegisterForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [promoCode, setPromoCode] = useState("");
-  const [bonusRub, setBonusRub] = useState(200);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -28,14 +28,6 @@ function RegisterForm() {
       .then((r) => r.json())
       .then((d: { user?: unknown }) => {
         if (d.user) router.replace("/plan");
-      })
-      .catch(() => undefined);
-    fetch("/api/public/pricing")
-      .then((r) => r.json())
-      .then((d: { newUserBonusRub?: number }) => {
-        if (typeof d.newUserBonusRub === "number") {
-          setBonusRub(d.newUserBonusRub);
-        }
       })
       .catch(() => undefined);
   }, [router]);
@@ -77,10 +69,9 @@ function RegisterForm() {
           <ThemeToggle />
         </div>
         <h1 className={styles.title}>Создать аккаунт</h1>
+        <SignupBonusHint variant="banner" />
         <p className={styles.lead}>
-          Бонус {bonusRub.toLocaleString("ru-RU")} ₽ на баланс сразу после
-          регистрации. Есть промокод друга — введите ниже: он получит % с ваших
-          пополнений.
+          Заполните форму — бонус появится на балансе сразу после регистрации.
         </p>
 
         <form className={styles.form} onSubmit={onSubmit}>
@@ -118,7 +109,7 @@ function RegisterForm() {
             />
           </label>
           <label>
-            Промокод (необязательно)
+            Промокод друга (необязательно)
             <input
               value={promoCode}
               onChange={(e) => setPromoCode(e.target.value.toUpperCase())}

@@ -6,6 +6,7 @@ import {
   SiteHeaderActions,
 } from "./components/HomeAuth";
 import { BrandLogo } from "./components/BrandLogo";
+import { SignupBonusHint } from "./components/SignupBonusHint";
 import styles from "./page.module.css";
 
 const sampleSlots = [
@@ -61,7 +62,7 @@ const jsonLd = {
         "@type": "Offer",
         price: "0",
         priceCurrency: "RUB",
-        description: "Регистрация и старт с пополнением баланса",
+        description: "Бонус на баланс при регистрации, оплата за посты с баланса",
       },
       publisher: { "@id": "https://smm-agents.ru/#org" },
     },
@@ -110,6 +111,7 @@ export default function HomePage() {
               <div className={styles.ctaRow}>
                 <HomeCtaButtons />
               </div>
+              <SignupBonusHint />
             </div>
 
             <div className={styles.heroVisual} aria-hidden>
@@ -257,8 +259,13 @@ export default function HomePage() {
           <h2 className={styles.sectionTitle}>Прозрачно с баланса</h2>
           <p className={styles.sectionLead}>
             Без скрытых подписок на всё сразу — платите за то, чем пользуетесь.
+            При регистрации сразу начисляем бонус на баланс.
           </p>
           <ul className={styles.priceList}>
+            <li>
+              <strong>200 ₽</strong>
+              <span>бонус на баланс при регистрации</span>
+            </li>
             <li>
               <strong>50 ₽</strong>
               <span>пост в недельном плане</span>
@@ -283,12 +290,13 @@ export default function HomePage() {
         <div className={`container ${styles.final}`}>
           <h2 className={styles.sectionTitle}>Откройте кабинет на smm-agents.ru</h2>
           <p className={styles.sectionLead}>
-            Создайте аккаунт, добавьте бизнес и запустите первую неделю контента
-            — ботов подключите, когда будете готовы.
+            Зарегистрируйтесь — сразу начислим бонус на баланс. Хватит, чтобы
+            собрать первую неделю постов и попробовать сервис без риска.
           </p>
           <div className={styles.ctaRow}>
             <HomeFinalCta />
           </div>
+          <SignupBonusHint />
         </div>
       </section>
 

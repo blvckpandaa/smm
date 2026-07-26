@@ -24,7 +24,7 @@ export function SiteHeaderActions() {
       <div className={styles.headerActions}>
         <ThemeToggle />
         <Link href="/register" className="btn">
-          Начать бесплатно
+          Начать · бонус 200 ₽
         </Link>
       </div>
     );
@@ -55,7 +55,7 @@ export function SiteHeaderActions() {
       </nav>
       <ThemeToggle />
       <Link href="/register" className="btn">
-        Начать бесплатно
+        Начать · бонус 200 ₽
       </Link>
     </div>
   );
@@ -77,7 +77,7 @@ export function HomeCtaButtons() {
     return (
       <>
         <Link href="/register" className="btn">
-          Создать аккаунт
+          Создать аккаунт · +200 ₽
         </Link>
         <a href="#how" className="btn btn-ghost">
           Смотреть как
@@ -102,7 +102,7 @@ export function HomeCtaButtons() {
   return (
     <>
       <Link href="/register" className="btn">
-        Создать аккаунт
+        Создать аккаунт · +200 ₽
       </Link>
       <a href="#how" className="btn btn-ghost">
         Смотреть как
@@ -131,7 +131,7 @@ export function HomeHowCta() {
 
   return (
     <Link href="/register" className="btn">
-      Зарегистрироваться
+      Зарегистрироваться · +200 ₽
     </Link>
   );
 }
@@ -152,7 +152,7 @@ export function HomeFinalCta() {
     return (
       <>
         <Link href="/register" className="btn">
-          Создать аккаунт
+          Создать аккаунт · +200 ₽
         </Link>
         <Link href="/login" className="btn btn-ghost">
           У меня уже есть аккаунт
@@ -172,7 +172,7 @@ export function HomeFinalCta() {
   return (
     <>
       <Link href="/register" className="btn">
-        Создать аккаунт
+        Создать аккаунт · +200 ₽
       </Link>
       <Link href="/login" className="btn btn-ghost">
         У меня уже есть аккаунт
