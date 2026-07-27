@@ -1,5 +1,6 @@
 import type { ThreadsConnection } from "@/lib/store/projects";
 import type { PostDraft } from "@/lib/smm/types";
+import { plainSocialText } from "@/lib/text/plain-social";
 
 /** Threads публикуем только текстом, без фото. */
 function textFor(draft: PostDraft): string {
@@ -11,7 +12,7 @@ function textFor(draft: PostDraft): string {
         draft.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")
       : "";
   const core = title && !body.startsWith(title) ? `${title}\n\n${body}` : body;
-  return `${core}${hashtags}`.slice(0, 500);
+  return plainSocialText(`${core}${hashtags}`).slice(0, 500);
 }
 
 async function waitThreadsContainer(

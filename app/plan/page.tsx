@@ -2097,7 +2097,7 @@ export default function PlanPage() {
         </div>
       ) : (
         <>
-          <div className={`container ${styles.cabinetShell}`}>
+          <div className={styles.cabinetShell}>
             <aside
               className={`${styles.sideNav} ${styles.desktopOnly}`}
               aria-label={t.navMenu}

@@ -15,6 +15,7 @@ import {
   creditUserBalance,
   type Project,
 } from "@/lib/store/projects";
+import { plainSocialText } from "@/lib/text/plain-social";
 
 export async function buildCommentReplyText(input: {
   bot: CommentBot;
@@ -29,7 +30,7 @@ export async function buildCommentReplyText(input: {
   if (mode === "faq") {
     const hit = matchFaqAnswer(comment, input.bot.faq ?? []);
     if (!hit) return { skip: true, reason: "no_faq_match" };
-    return { text: hit, mode };
+    return { text: plainSocialText(hit), mode };
   }
 
   const text = await generateAiCommentReply({

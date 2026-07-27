@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { PostDraft } from "@/lib/smm/types";
 import { resolveMediaAbsolutePath } from "@/lib/media/store";
+import { plainSocialText } from "@/lib/text/plain-social";
 
 export type TelegramCreds = {
   botToken: string;
@@ -13,7 +14,7 @@ function captionFor(draft: PostDraft): string {
       ? "\n\n" +
         draft.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")
       : "";
-  return `${draft.body}${hashtags}`.slice(0, 1024);
+  return plainSocialText(`${draft.body}${hashtags}`).slice(0, 1024);
 }
 
 function textFor(draft: PostDraft): string {
@@ -22,7 +23,7 @@ function textFor(draft: PostDraft): string {
       ? "\n\n" +
         draft.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")
       : "";
-  return `${draft.body}${hashtags}`.slice(0, 4000);
+  return plainSocialText(`${draft.body}${hashtags}`).slice(0, 4000);
 }
 
 export async function publishToTelegram(

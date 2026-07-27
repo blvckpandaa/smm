@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { createPublicMediaUrl } from "@/lib/media/public-url";
 import type { PostDraft } from "@/lib/smm/types";
 import { resolveMediaAbsolutePath } from "@/lib/media/store";
+import { plainSocialText } from "@/lib/text/plain-social";
 
 export type VkCreds = {
   /** Токен сообщества — для wall.post от имени группы */
@@ -159,7 +160,7 @@ export async function publishToVk(
       ? "\n\n" +
         draft.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")
       : "";
-  let message = `${draft.body}${hashtags}`.slice(0, 15000);
+  let message = plainSocialText(`${draft.body}${hashtags}`).slice(0, 15000);
   const ownerId = groupId.startsWith("-") ? groupId : `-${groupId}`;
 
   try {

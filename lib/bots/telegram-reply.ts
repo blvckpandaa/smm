@@ -1,4 +1,5 @@
 import { getAppUrl } from "@/lib/meta/config";
+import { plainSocialText } from "@/lib/text/plain-social";
 
 export async function setTelegramWebhook(input: {
   botToken: string;
@@ -45,7 +46,7 @@ export async function replyTelegramComment(input: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: input.chatId,
-          text: input.text.slice(0, 3900),
+          text: plainSocialText(input.text).slice(0, 3900),
           reply_to_message_id: input.replyToMessageId,
           allow_sending_without_reply: true,
         }),

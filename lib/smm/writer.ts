@@ -2,6 +2,7 @@ import { deepseekChat, extractJson, isDeepSeekConfigured } from "@/lib/ai/client
 import type { BrandBrief, ContentPlan, PlannedPost } from "@/lib/marketer/types";
 import { draftNeedsPhoto } from "./photo";
 import { normalizeWebsiteUrl } from "@/lib/marketer/website";
+import { plainSocialText } from "@/lib/text/plain-social";
 import type { PostDraft, WritePostsInput } from "./types";
 
 const SYSTEM = `Ты агент-SMM платформы SMM-Agents.
@@ -19,7 +20,7 @@ const SYSTEM = `Ты агент-SMM платформы SMM-Agents.
 - Соблюдай Tone of Voice и табу
 - CTA в конце естественно
 - Если в брифе есть websiteUrl — вставляй ссылку в CTA и в текст, где уместно (оффер, awareness, призыв перейти). Не дублируй ссылку в каждой строке
-- Без markdown-разметки в body (можно эмодзи умеренно, если тон позволяет)
+- Без markdown: ссылки только голым URL (https://...), не [текст](url). Можно эмодзи умеренно, если тон позволяет
 
 Формат:
 {
@@ -99,8 +100,8 @@ function mapAiPost(
     goal: planPost.goal,
     format: planPost.format,
     cta: planPost.cta,
-    title: raw.title?.trim() || planPost.hook.slice(0, 80),
-    body: raw.body?.trim() || planPost.hook,
+    title: plainSocialText(raw.title?.trim() || planPost.hook.slice(0, 80)),
+    body: plainSocialText(raw.body?.trim() || planPost.hook),
     hashtags: Array.isArray(raw.hashtags)
       ? raw.hashtags.map(String).slice(0, 8)
       : [],

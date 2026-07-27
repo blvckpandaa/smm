@@ -1,6 +1,7 @@
 import type { FacebookConnection } from "@/lib/store/projects";
 import type { PostDraft } from "@/lib/smm/types";
 import { createPublicMediaUrl } from "@/lib/media/public-url";
+import { plainSocialText } from "@/lib/text/plain-social";
 
 function messageFor(draft: PostDraft): string {
   const hashtags =
@@ -8,7 +9,7 @@ function messageFor(draft: PostDraft): string {
       ? "\n\n" +
         draft.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")
       : "";
-  return `${draft.body}${hashtags}`.slice(0, 6000);
+  return plainSocialText(`${draft.body}${hashtags}`).slice(0, 6000);
 }
 
 export async function publishToFacebook(

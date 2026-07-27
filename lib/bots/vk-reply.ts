@@ -12,7 +12,7 @@ export async function replyVkWallComment(input: {
     post_id: String(input.postId),
     reply_to_comment: String(input.replyToComment),
     from_group: String(Math.abs(ownerId)),
-    message: input.message.slice(0, 4000),
+    message: plainSocialText(input.message).slice(0, 4000),
     access_token: input.accessToken,
     v: "5.199",
   });

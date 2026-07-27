@@ -3,6 +3,7 @@ import type { XConnection } from "@/lib/store/projects";
 import type { PostDraft } from "@/lib/smm/types";
 import { resolveMediaAbsolutePath } from "@/lib/media/store";
 import { refreshXToken } from "@/lib/x/oauth";
+import { plainSocialText } from "@/lib/text/plain-social";
 
 function textFor(draft: PostDraft): string {
   const title = draft.title?.trim();
@@ -17,7 +18,7 @@ function textFor(draft: PostDraft): string {
       : "";
   const core =
     title && body && !body.startsWith(title) ? `${title}\n\n${body}` : body || title || "";
-  return `${core}${hashtags}`.slice(0, 280);
+  return plainSocialText(`${core}${hashtags}`).slice(0, 280);
 }
 
 async function uploadMediaSimple(

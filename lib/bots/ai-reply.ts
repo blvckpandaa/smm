@@ -1,6 +1,7 @@
 import { deepseekChat, isDeepSeekConfigured } from "@/lib/ai/client";
 import type { BrandBrief } from "@/lib/marketer/types";
 import type { FaqItem } from "@/lib/bots/types";
+import { plainSocialText } from "@/lib/text/plain-social";
 
 const SYSTEM = `Ты SMM-ассистент бренда. Отвечаешь на комментарии под постами кратко и по делу.
 Правила:
@@ -9,7 +10,8 @@ const SYSTEM = `Ты SMM-ассистент бренда. Отвечаешь н�
 - Не выдумывай цены, акции, сроки — только факты из брифа/FAQ
 - Не обещай то, чего нет в данных
 - Можно мягко предложить написать в ЛС / перейти на сайт, если сайт есть в брифе
-- Без markdown и без хештегов
+- Без markdown: ссылки только голым URL (https://...), не [текст](url)
+- Без хештегов
 - Ответь ТОЛЬКО текстом ответа, без кавычек и пояснений`;
 
 export async function generateAiCommentReply(input: {
@@ -48,5 +50,5 @@ export async function generateAiCommentReply(input: {
     temperature: 0.55,
   });
 
-  return text.replace(/^["«]|["»]$/g, "").trim().slice(0, 900);
+  return plainSocialText(text).slice(0, 900);
 }

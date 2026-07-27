@@ -1429,6 +1429,8 @@
   padding-top: 1.1rem;
   padding-bottom: 2rem;
   align-items: start;
+  width: min(100% - 2rem, 1280px);
+  margin-inline: auto;
 }
 
 .sideNav {
@@ -1440,7 +1442,6 @@
   gap: 0.85rem;
   min-width: 0;
   max-width: 100%;
-  overflow-x: hidden;
 }
 
 .pageHead {
@@ -1455,7 +1456,7 @@
   margin-top: 0;
 }
 
-@media (min-width: 861px) {
+@media (min-width: 1025px) {
   .cabinetShell {
     grid-template-columns: 260px minmax(0, 1fr);
     gap: 1.35rem;
@@ -2105,7 +2106,7 @@
 
 .contentGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
   gap: 1rem;
   align-items: start;
   width: 100%;
@@ -2130,7 +2131,6 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
-  table-layout: fixed;
 }
 
 .contentTable th,
@@ -2139,8 +2139,6 @@
   text-align: left;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .contentTable th {
@@ -2498,9 +2496,74 @@
   margin-bottom: 0.85rem;
 }
 
+.mobileCard,
+.mobileCardOn {
+  display: grid;
+  gap: 0.45rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  text-align: left;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobileCardOn {
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--lime) 55%, var(--wash));
+  color: var(--on-lime);
+}
+
+.mobileCardTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.65rem;
+  align-items: flex-start;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.mobileCardTop > span:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+
+.mobileCardTop .status {
+  flex: 0 1 auto;
+  max-width: 46%;
+  text-align: right;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.mobileCardTitle {
+  font-size: 1.02rem;
+  line-height: 1.35;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.mobileCardMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
 .mobileCardHit {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.4rem;
   width: 100%;
   border: 0;
   background: transparent;
@@ -2511,15 +2574,18 @@
 }
 
 .mobilePrimary {
-  margin-top: 0.35rem;
+  margin-top: 0.15rem;
+  width: 100%;
+  min-height: 44px;
   border: 1px solid var(--ink);
   background: rgba(200, 255, 61, 0.45);
-  border-radius: 10px;
-  padding: 0.55rem 0.7rem;
+  border-radius: 12px;
+  padding: 0.65rem 0.85rem;
   font-weight: 800;
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   cursor: pointer;
   color: var(--ink);
+  box-sizing: border-box;
 }
 
 .botActions {
@@ -2754,7 +2820,6 @@
   min-width: 0;
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
   box-sizing: border-box;
 }
 
@@ -2784,6 +2849,7 @@
   gap: 0.4rem;
   min-width: 0;
   width: 100%;
+  max-width: 100%;
 }
 
 .fieldLabel {
@@ -2828,14 +2894,32 @@ textarea.fieldControl {
   min-height: 220px;
   max-height: min(55vh, 480px);
   line-height: 1.45;
+  overflow-x: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .draftPanel :global(.btn),
 .draftPanel :global(.btn-ghost) {
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
   white-space: normal;
   height: auto;
   min-height: 44px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.draftActionsSticky,
+.draftActions {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .emptyDash {
@@ -2921,28 +3005,60 @@ textarea.fieldControl {
   background: transparent;
   color: var(--signal);
   font-weight: 800;
-  font-size: 0.9rem;
-  padding: 0 0 0.45rem;
+  font-size: 0.92rem;
+  padding: 0.15rem 0 0.55rem;
   cursor: pointer;
   text-align: left;
+  min-height: 44px;
+  align-items: center;
 }
 
 .draftActionsSticky {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  flex-wrap: nowrap;
   gap: 0.55rem;
   margin-top: 0.25rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .actions,
 .draftActions {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  flex-wrap: nowrap;
   gap: 0.6rem;
   margin-top: 1rem;
+  width: 100%;
+  min-width: 0;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 1200px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .draftPanel {
+    position: static;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .draftActionsSticky .btn,
+  .draftActions .btn,
+  .draftPanel :global(.btn),
+  .draftPanel :global(.btn-ghost) {
+    flex: none;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 920px) {
   .page {
     padding-bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px));
   }
@@ -3009,67 +3125,126 @@ textarea.fieldControl {
     display: none !important;
   }
 
-  .mobileOnly {
-    display: revert !important;
-  }
-
-  .mobileList {
-    display: grid;
-    gap: 0.55rem;
-  }
-
-  .mobileCard,
-  .mobileCardOn {
-    display: grid;
-    gap: 0.35rem;
+  .mobileList.mobileOnly {
+    display: grid !important;
+    gap: 0.65rem;
     width: 100%;
-    text-align: left;
-    border: 1.5px solid var(--line);
-    border-radius: 16px;
-    padding: 0.85rem 0.95rem;
-    background: var(--surface);
-    color: var(--ink);
-    cursor: default;
-    -webkit-tap-highlight-color: transparent;
+    min-width: 0;
   }
 
-  .mobileCardOn {
-    border-color: var(--ink);
-    background: color-mix(in srgb, var(--lime) 55%, var(--wash));
-    color: var(--on-lime);
+  .bizSwitch.mobileOnly {
+    display: grid !important;
   }
 
-  .mobileCardTop {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.5rem;
-    align-items: center;
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--muted);
+  .stepDanger.mobileOnly {
+    display: inline-flex !important;
   }
 
-  .mobileCardTitle {
-    font-size: 1rem;
-    line-height: 1.3;
-    font-weight: 800;
+  .backMobile.mobileOnly {
+    display: inline-flex !important;
   }
 
-  .mobileCardMeta {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.5rem;
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: var(--ink-soft);
+  .cabinetShell {
+    width: min(100% - 1.25rem, 1280px);
+    gap: 0.75rem;
+    padding-top: 0.75rem;
+    padding-bottom: 1.25rem;
+  }
+
+  .cabinetMain {
+    gap: 0.7rem;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .contentGrid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .mobileGroup {
+    gap: 0.55rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .mobileGroup .dayGroupHead {
+    padding: 0.35rem 0.15rem 0.1rem;
+    position: static;
+    background: transparent;
+  }
+
+  .postsFocusBar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .postsStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+  }
+
+  .postsStat,
+  .postsStatOn {
+    padding: 0.55rem 0.6rem;
+    border-radius: 12px;
+    min-width: 0;
+  }
+
+  .postsStat span,
+  .postsStatOn span {
+    font-size: 0.68rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .postsChannelFilters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.35rem;
+    padding-bottom: 0.15rem;
+    margin-inline: -0.1rem;
+    padding-inline: 0.1rem;
+  }
+
+  .postsChannelFilters .chip,
+  .postsChannelFilters .chipOn {
+    flex: 0 0 auto;
+  }
+
+  .postsToolbarRight {
+    width: 100%;
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .postsSearchWrap,
+  .postsSort {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .wide.panel:has(.contentEditing) .postsFocusBar,
+  .wide.panel:has(.contentEditing) .postsControlsSticky,
+  .wide.panel:has(.contentEditing) .postsMetaRow {
+    display: none;
   }
 
   .contentEditing .mobileList {
-    display: none;
+    display: none !important;
   }
 
   .draftPanel {
     display: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: transparent;
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .draftPanelOpen,
@@ -3077,14 +3252,38 @@ textarea.fieldControl {
     display: grid;
   }
 
-  .backMobile {
-    display: inline-flex;
+  .draftPanelHead {
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+  }
+
+  .draftPanelHead .status {
+    max-width: 100%;
+    text-align: left;
+  }
+
+  .fieldControl,
+  .scheduleRow input[type="date"],
+  .scheduleRow input[type="time"],
+  .postsSearch,
+  .postsSort {
+    font-size: 16px;
+  }
+
+  .scheduleRow {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
   }
 
   .panel,
   .result {
     border-radius: 18px;
-    padding: 1rem 0.95rem 1.15rem;
+    padding: 0.9rem 0.85rem 1.1rem;
+    overflow-x: visible;
+  }
+
+  .wide.panel {
+    padding-inline: 0.85rem;
   }
 
   .title {
@@ -3122,18 +3321,28 @@ textarea.fieldControl {
     position: sticky;
     bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
     z-index: 5;
-    margin: 0.35rem -0.25rem 0;
-    padding: 0.65rem 0.25rem;
+    margin: 0.5rem 0 0;
+    padding: 0.75rem 0 0.25rem;
     background: linear-gradient(
       180deg,
       transparent,
-      rgba(232, 238, 242, 0.95) 28%
+      color-mix(in srgb, var(--paper) 88%, var(--wash)) 22%,
+      color-mix(in srgb, var(--paper) 96%, var(--wash)) 55%
     );
+    flex-direction: column;
+    gap: 0.5rem;
   }
 
-  .draftActionsSticky .btn {
-    flex: 1;
+  .draftActionsSticky .btn,
+  .draftPanel :global(.btn),
+  .draftPanel :global(.btn-ghost) {
+    flex: none;
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
+    white-space: normal;
+    line-height: 1.25;
+    padding-block: 0.85rem;
   }
 
   .scheduleRow {
@@ -3255,7 +3464,7 @@ textarea.fieldControl {
   }
 }
 
-@media (min-width: 861px) {
+@media (min-width: 1025px) {
   .bottomNav {
     display: none !important;
   }
@@ -3273,6 +3482,14 @@ textarea.fieldControl {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.65rem;
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 1024px) {
+  .scheduleRow {
+    grid-template-columns: 1fr;
+  }
 }
 
 .scheduleRow label {
@@ -3287,7 +3504,9 @@ textarea.fieldControl {
 .scheduleRow input[type="date"],
 .scheduleRow input[type="time"] {
   width: 100%;
+  max-width: 100%;
   min-width: 0;
+  box-sizing: border-box;
 }
 
 .scheduleWhy,
@@ -3354,37 +3573,15 @@ textarea.fieldControl {
   white-space: normal;
 }
 
-.contentTable th:nth-child(1),
-.contentTable td:nth-child(1) {
-  width: 12%;
-}
-
-.contentTable th:nth-child(2),
-.contentTable td:nth-child(2) {
-  width: 11%;
-}
-
-.contentTable th:nth-child(3),
-.contentTable td:nth-child(3) {
-  width: 36%;
-}
-
-.contentTable th:nth-child(4),
-.contentTable td:nth-child(4) {
-  width: 24%;
-}
-
-.contentTable th:nth-child(5),
-.contentTable td:nth-child(5) {
-  width: 17%;
-}
-
-.contentTable td .cellMain,
-.contentTable td .cellSub {
-  max-width: 100%;
+.contentTable td .cellMain {
+  max-width: 36ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.contentTable td .cellSub {
+  max-width: 36ch;
 }
 
 .status[data-status="approved"],
@@ -3427,6 +3624,9 @@ textarea.fieldControl {
   border-radius: 22px;
   background: color-mix(in srgb, var(--wash) 70%, var(--paper));
   padding: 1.35rem 1.35rem 1.5rem;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .panel {

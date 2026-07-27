@@ -1,6 +1,7 @@
 import type { InstagramConnection } from "@/lib/store/projects";
 import type { PostDraft } from "@/lib/smm/types";
 import { createPublicMediaUrl } from "@/lib/media/public-url";
+import { plainSocialText } from "@/lib/text/plain-social";
 
 function captionFor(draft: PostDraft): string {
   const title = draft.title?.trim();
@@ -13,7 +14,7 @@ function captionFor(draft: PostDraft): string {
   // Описание поста в Instagram = текст (заголовок + body)
   const core =
     title && body && !body.startsWith(title) ? `${title}\n\n${body}` : body || title || "";
-  return `${core}${hashtags}`.slice(0, 2200);
+  return plainSocialText(`${core}${hashtags}`).slice(0, 2200);
 }
 
 async function waitContainerReady(
