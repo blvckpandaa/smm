@@ -1439,6 +1439,8 @@
   display: grid;
   gap: 0.85rem;
   min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .pageHead {
@@ -2103,9 +2105,17 @@
 
 .contentGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.contentGrid > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .tableWrap {
@@ -2113,12 +2123,14 @@
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface-muted);
+  max-width: 100%;
 }
 
 .contentTable {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
+  table-layout: fixed;
 }
 
 .contentTable th,
@@ -2127,6 +2139,8 @@
   text-align: left;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .contentTable th {
@@ -2738,6 +2752,10 @@
   position: sticky;
   top: 84px;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .draftPanelHead {
@@ -2745,12 +2763,20 @@
   justify-content: space-between;
   gap: 0.75rem;
   align-items: flex-start;
+  min-width: 0;
+}
+
+.draftPanelHead > div {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .draftPanelHead h3 {
   margin: 0.15rem 0 0;
   font-size: 1.05rem;
   line-height: 1.3;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .field {
@@ -2770,6 +2796,7 @@
 
 .fieldControl {
   width: 100%;
+  max-width: 100%;
   min-width: 0;
   border: 1.5px solid var(--line);
   border-radius: 12px;
@@ -2778,6 +2805,12 @@
   color: var(--ink);
   line-height: 1.45;
   resize: vertical;
+  box-sizing: border-box;
+}
+
+select.fieldControl {
+  display: block;
+  appearance: auto;
 }
 
 .fieldControl:focus {
@@ -2792,9 +2825,17 @@
 }
 
 textarea.fieldControl {
-  min-height: 280px;
-  max-height: min(70vh, 560px);
+  min-height: 220px;
+  max-height: min(55vh, 480px);
   line-height: 1.45;
+}
+
+.draftPanel :global(.btn),
+.draftPanel :global(.btn-ghost) {
+  max-width: 100%;
+  white-space: normal;
+  height: auto;
+  min-height: 44px;
 }
 
 .emptyDash {
@@ -3305,6 +3346,47 @@ textarea.fieldControl {
   color: var(--signal);
 }
 
+.draftPanelHead .status {
+  flex: 0 0 auto;
+  max-width: 9.5rem;
+  text-align: right;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.contentTable th:nth-child(1),
+.contentTable td:nth-child(1) {
+  width: 12%;
+}
+
+.contentTable th:nth-child(2),
+.contentTable td:nth-child(2) {
+  width: 11%;
+}
+
+.contentTable th:nth-child(3),
+.contentTable td:nth-child(3) {
+  width: 36%;
+}
+
+.contentTable th:nth-child(4),
+.contentTable td:nth-child(4) {
+  width: 24%;
+}
+
+.contentTable th:nth-child(5),
+.contentTable td:nth-child(5) {
+  width: 17%;
+}
+
+.contentTable td .cellMain,
+.contentTable td .cellSub {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status[data-status="approved"],
 .status[data-status="scheduled"],
 .status[data-status="published"] {
@@ -3317,14 +3399,18 @@ textarea.fieldControl {
 }
 
 .draft textarea,
-.draft input {
+.draft input,
+.draft select {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border: 1.5px solid var(--line);
   border-radius: 12px;
   padding: 0.55rem 0.75rem;
   background: var(--surface);
   color: var(--ink);
   resize: vertical;
+  box-sizing: border-box;
 }
 
 .draft label {
