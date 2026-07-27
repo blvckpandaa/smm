@@ -33,11 +33,6 @@ export function SiteHeaderActions() {
   if (user) {
     return (
       <div className={styles.headerActions}>
-        <nav className={styles.navLinks}>
-          <a href="#how">Как это работает</a>
-          <a href="#who">Кому подходит</a>
-          <Link href="/plan">Кабинет</Link>
-        </nav>
         <ThemeToggle />
         <Link href="/plan" className="btn">
           В кабинет
@@ -48,12 +43,10 @@ export function SiteHeaderActions() {
 
   return (
     <div className={styles.headerActions}>
-      <nav className={styles.navLinks}>
-        <a href="#how">Как это работает</a>
-        <a href="#who">Кому подходит</a>
-        <Link href="/login">Вход</Link>
-      </nav>
       <ThemeToggle />
+      <Link href="/login" className={styles.navTextLink}>
+        Вход
+      </Link>
       <Link href="/register" className="btn">
         Начать · бонус 200 ₽
       </Link>

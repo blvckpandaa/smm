@@ -11,7 +11,9 @@ import styles from "../auth.module.css";
 function LoginForm() {
   const router = useRouter();
   const search = useSearchParams();
-  const next = search.get("next") || "/plan";
+  const rawNext = search.get("next") || "/plan";
+  const next =
+    rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/plan";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,10 +23,10 @@ function LoginForm() {
     fetch("/api/auth")
       .then((r) => r.json())
       .then((d: { user?: unknown }) => {
-        if (d.user) router.replace("/plan");
+        if (d.user) router.replace(next);
       })
       .catch(() => undefined);
-  }, [router]);
+  }, [router, next]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

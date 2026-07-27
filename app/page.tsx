@@ -84,6 +84,7 @@ export default function HomePage() {
           <nav className={styles.navLinks} aria-label="Разделы">
             <a href="#new">Новое</a>
             <a href="#how">Как работает</a>
+            <a href="#who">Кому подходит</a>
             <a href="#price">Цены</a>
           </nav>
           <SiteHeaderActions />
