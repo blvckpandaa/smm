@@ -3524,7 +3524,7 @@ export default function PlanPage() {
                                     </span>
                                     <textarea
                                       className={styles.fieldControl}
-                                      rows={8}
+                                      rows={14}
                                       value={draft.body}
                                       disabled={locked}
                                       onChange={(e) =>

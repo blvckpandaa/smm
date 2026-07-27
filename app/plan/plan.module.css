@@ -2792,7 +2792,9 @@
 }
 
 textarea.fieldControl {
-  min-height: 160px;
+  min-height: 280px;
+  max-height: min(70vh, 560px);
+  line-height: 1.45;
 }
 
 .emptyDash {
