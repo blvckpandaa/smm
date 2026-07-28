@@ -47,8 +47,10 @@ export interface BrandBrief {
   facts: Record<string, string>;
   channels: Channel[];
   postsPerWeek: number;
-  /** Сколько постов публиковать в один день (1–5). Неделя = postsPerDay × 7 */
+  /** Сколько постов публиковать в один день (1–5), среднее по выбранным дням */
   postsPerDay?: number;
+  /** Дни публикации: 0 = startDate, …, 6 = startDate + 6 */
+  postingDays?: number[];
   goals?: PostGoal[];
   taboos?: string[];
   startDate: string; // YYYY-MM-DD

@@ -113,6 +113,7 @@ export async function POST(req: Request, ctx: Ctx) {
     const freq = resolvePostFrequency(brief);
     brief.postsPerDay = freq.postsPerDay;
     brief.postsPerWeek = freq.postsPerWeek;
+    brief.postingDays = freq.postingDays;
 
     const postsCount = freq.postsPerWeek;
     const charge = chargeUserForPosts({
@@ -120,7 +121,7 @@ export async function POST(req: Request, ctx: Ctx) {
       postsCount,
       pricePerPost: postPriceRub,
       projectId: id,
-      description: `Маркетолог: план ${freq.postsPerDay}/день (${postsCount} постов) × ${postPriceRub} ₽`,
+      description: `Маркетолог: ${postsCount} постов × ${postPriceRub} ₽`,
     });
     if (!charge.ok) {
       return Response.json(

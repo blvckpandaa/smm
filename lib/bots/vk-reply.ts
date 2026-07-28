@@ -1,3 +1,5 @@
+import { plainSocialText } from "@/lib/text/plain-social";
+
 /** Ответ на комментарий VK от имени сообщества */
 export async function replyVkWallComment(input: {
   accessToken: string;

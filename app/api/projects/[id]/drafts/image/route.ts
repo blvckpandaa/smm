@@ -13,7 +13,7 @@ import {
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** Сгенерировать / пересоздать ИИ-фото для черновика (25 ₽) */
+/** Сгенерировать / пересоздать ИИ-фото для черновика. Первое фото — бесплатно, повтор — 10 ₽ */
 export async function POST(req: Request, ctx: Ctx) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
@@ -36,24 +36,29 @@ export async function POST(req: Request, ctx: Ctx) {
     }
 
     const { imagePriceRub } = getRuntimePricing();
-    const charge = chargeUserFixed({
-      userId: auth.session.userId,
-      amountRub: imagePriceRub,
-      projectId: id,
-      description: `Фото поста · ${imagePriceRub} ₽`,
-    });
-    if (!charge.ok) {
-      return Response.json(
-        {
-          error: charge.error,
-          balanceRub: charge.balanceRub,
-          needRub: charge.needRub,
-          imagePriceRub,
-        },
-        { status: 402 }
-      );
+    const isRegenerate = Boolean(draft.imagePath);
+    const amountRub = isRegenerate ? imagePriceRub : 0;
+
+    if (amountRub > 0) {
+      const charge = chargeUserFixed({
+        userId: auth.session.userId,
+        amountRub,
+        projectId: id,
+        description: `Новое фото поста · ${amountRub} ₽`,
+      });
+      if (!charge.ok) {
+        return Response.json(
+          {
+            error: charge.error,
+            balanceRub: charge.balanceRub,
+            needRub: charge.needRub,
+            imagePriceRub,
+          },
+          { status: 402 }
+        );
+      }
+      chargedRub = charge.chargedRub;
     }
-    chargedRub = charge.chargedRub;
 
     const prompt = await buildImagePrompt({ brief: project.brief, draft });
     const bytes = await generateImageBytes(prompt);
@@ -79,8 +84,9 @@ export async function POST(req: Request, ctx: Ctx) {
       project: toPublicProject(updated!),
       billing: {
         chargedRub,
-        balanceRub: user?.balanceRub ?? charge.balanceRub,
+        balanceRub: user?.balanceRub ?? 0,
         imagePriceRub,
+        firstFree: !isRegenerate,
       },
     });
   } catch (e) {

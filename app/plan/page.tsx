@@ -20,6 +20,12 @@ import {
   UI_LANG_KEY,
 } from "@/lib/i18n/ui";
 import { isValidWebsiteUrl, normalizeWebsiteUrl } from "@/lib/marketer/website";
+import {
+  resolvePostFrequency,
+  normalizePostingDays,
+  MAX_PER_DAY,
+} from "@/lib/marketer/frequency";
+import { addCalendarDays, weekdayIndexFromYmd } from "@/lib/marketer/timezone";
 import { parseVkGroupId } from "@/lib/vk/parse-group-id";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { BrandLogo } from "@/app/components/BrandLogo";
@@ -499,8 +505,12 @@ function cleanExample(value: string): string {
 }
 
 function briefForForm(brief: BrandBrief): BrandBrief {
+  const freq = resolvePostFrequency(brief);
   return {
     ...brief,
+    postingDays: freq.postingDays,
+    postsPerDay: freq.postsPerDay,
+    postsPerWeek: freq.postsPerWeek,
     brandName:
       brief.brandName.trim() === "Мой бизнес"
         ? ""
@@ -518,6 +528,22 @@ function briefForForm(brief: BrandBrief): BrandBrief {
       desire: cleanExample(brief.audience.desire),
     },
   };
+}
+
+const WEEKDAY_SHORT_RU = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+const WEEKDAY_SHORT_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const POST_COUNT_PRESETS = [1, 3, 7, 14];
+
+function weekDayLabels(startDate: string, uiLang: UiLang) {
+  const short = uiLang === "en" ? WEEKDAY_SHORT_EN : WEEKDAY_SHORT_RU;
+  return [0, 1, 2, 3, 4, 5, 6].map((offset) => ({
+    offset,
+    label: short[weekdayIndexFromYmd(addCalendarDays(startDate, offset))],
+  }));
+}
+
+function draftImagePriceRub(draft: PostDraft, regeneratePriceRub: number): number {
+  return draft.imagePath ? regeneratePriceRub : 0;
 }
 
 const ACTIVE_KEY = "smm-agents-active-project";
@@ -654,6 +680,11 @@ export default function PlanPage() {
   const project = useMemo(
     () => projects.find((p) => p.id === projectId) ?? null,
     [projects, projectId]
+  );
+
+  const briefFreq = useMemo(
+    () => (brief ? resolvePostFrequency(brief) : null),
+    [brief]
   );
 
   const selectedDraft = useMemo(() => {
@@ -951,28 +982,12 @@ export default function PlanPage() {
     setDraftsPolling(false);
   }, []);
 
-  const PHOTO_CONCURRENCY = 3;
-
   const draftsJobNotice = useCallback(
     (job: PublicProject["draftsJob"]) => {
       if (!job || job.status !== "running") return null;
-      if (job.phase === "texts") {
-        return uiLang === "en"
-          ? "Writing post texts… (~30 sec)"
-          : "Пишем тексты постов… (~30 сек)";
-      }
-      if (job.phase === "photos") {
-        const done = job.photoDone ?? 0;
-        const total = job.photoTotal ?? 0;
-        const left = Math.max(0, total - done);
-        const mins = Math.max(1, Math.ceil(left / PHOTO_CONCURRENCY / 2));
-        return uiLang === "en"
-          ? `Texts ready. Generating photos ${done}/${total}… (~${mins} min left). You can read drafts meanwhile.`
-          : `Тексты готовы. Генерируем фото ${done}/${total}… (ещё ~${mins} мин). Черновики уже можно смотреть.`;
-      }
       return uiLang === "en"
-        ? "Writing post texts and photos… You can refresh — generation continues on the server."
-        : "Пишем тексты и фото… Можно обновить страницу — генерация продолжается на сервере.";
+        ? "Writing post texts… You can refresh — generation continues on the server."
+        : "Пишем тексты постов… Можно обновить страницу — генерация продолжается на сервере.";
     },
     [uiLang]
   );
@@ -985,8 +1000,8 @@ export default function PlanPage() {
       setError(null);
       setNotice(
         uiLang === "en"
-          ? "Writing post texts… (~30 sec, then photos in parallel)"
-          : "Пишем тексты… (~30 сек, затем фото параллельно)"
+          ? "Writing post texts… (~30 sec)"
+          : "Пишем тексты постов… (~30 сек)"
       );
 
       const tick = async () => {
@@ -1215,18 +1230,12 @@ export default function PlanPage() {
 
   function briefPayload(): BrandBrief {
     if (!brief) throw new Error("no brief");
-    const postsPerDay = Math.min(
-      5,
-      Math.max(
-        1,
-        brief.postsPerDay ??
-          (Math.round((brief.postsPerWeek || 7) / 7) || 1)
-      )
-    );
+    const freq = resolvePostFrequency(brief);
     return {
       ...brief,
-      postsPerDay,
-      postsPerWeek: postsPerDay * 7,
+      postingDays: freq.postingDays,
+      postsPerDay: freq.postsPerDay,
+      postsPerWeek: freq.postsPerWeek,
       channels: brief.channels.filter((c) => WORKING_CHANNELS.has(c)),
       websiteUrl: normalizeWebsiteUrl(brief.websiteUrl ?? ""),
     };
@@ -1318,8 +1327,8 @@ export default function PlanPage() {
     setError(null);
     setNotice(
       uiLang === "en"
-        ? "Writing post texts… (~30 sec, then photos in parallel)"
-        : "Пишем тексты… (~30 сек, затем фото параллельно по 3 штуки)"
+        ? "Writing post texts… (~30 sec)"
+        : "Пишем тексты постов… (~30 сек)"
     );
     try {
       const res = await fetch(`/api/projects/${projectId}/posts`, {
@@ -1370,11 +1379,13 @@ export default function PlanPage() {
 
   async function generateDraftImage(draftId: string) {
     if (!projectId) return;
-    if (balanceRub < imagePriceRub) {
+    const draft = project?.drafts.find((d) => d.id === draftId);
+    const price = draft ? draftImagePriceRub(draft, imagePriceRub) : imagePriceRub;
+    if (price > 0 && balanceRub < price) {
       setError(
         uiLang === "en"
-          ? `Need ${imagePriceRub} ₽ for a new photo, balance ${balanceRub} ₽`
-          : `Нужно ${imagePriceRub} ₽ за фото, на балансе ${balanceRub} ₽`
+          ? `Need ${price} ₽ for a new photo, balance ${balanceRub} ₽`
+          : `Нужно ${price} ₽ за новое фото, на балансе ${balanceRub} ₽`
       );
       openBilling();
       return;
@@ -1406,6 +1417,10 @@ export default function PlanPage() {
           uiLang === "en"
             ? `Charged ${data.billing.chargedRub} ₽ for photo`
             : `Списано ${data.billing.chargedRub} ₽ за фото`
+        );
+      } else if (data.billing?.firstFree) {
+        setNotice(
+          uiLang === "en" ? "Photo created (free)" : "Фото создано (бесплатно)"
         );
       }
       void refreshBilling();
@@ -2463,113 +2478,156 @@ export default function PlanPage() {
                     <span className={styles.fieldHint}>{t.audienceLangHint}</span>
                   </label>
                   <div className={`${styles.full} ${styles.freqCard}`}>
-                    <div className={styles.freqHead}>
-                      <div>
-                        <p className={styles.freqTitle}>{t.freqTitle}</p>
-                        <p className={styles.fieldHint}>{t.postsPerDayHint}</p>
-                      </div>
-                      <div className={styles.freqSummary}>
-                        <span>
-                          <strong>
-                            {brief.postsPerDay ??
-                              Math.max(
-                                1,
-                                Math.round((brief.postsPerWeek || 7) / 7)
-                              )}
-                          </strong>{" "}
-                          {t.freqPerDay}
-                        </span>
-                        <span>
-                          <strong>{brief.postsPerWeek}</strong> {t.freqPerWeek}
-                        </span>
-                        <span>
-                          <strong>
-                            {(brief.postsPerWeek * postPriceRub).toLocaleString(
-                              uiLang === "en" ? "en-US" : "ru-RU"
-                            )}{" "}
-                            ₽
-                          </strong>{" "}
-                          {t.freqCost}
-                        </span>
-                      </div>
-                    </div>
-                    <div className={styles.freqPresets} role="group" aria-label={t.postsPerDay}>
-                      {[
-                        { day: 1, label: t.freqPresetLight },
-                        { day: 2, label: t.freqPresetNorm },
-                        { day: 3, label: t.freqPresetActive },
-                        { day: 5, label: t.freqPresetHot },
-                      ].map(({ day, label }) => {
-                        const active =
-                          (brief.postsPerDay ??
-                            Math.max(
-                              1,
-                              Math.round((brief.postsPerWeek || 7) / 7)
-                            )) === day;
-                        const week = day * 7;
-                        const cost = week * postPriceRub;
-                        return (
-                          <button
-                            key={day}
-                            type="button"
-                            className={
-                              active ? styles.freqPresetOn : styles.freqPreset
-                            }
-                            onClick={() =>
-                              setBrief({
-                                ...brief,
-                                postsPerDay: day,
-                                postsPerWeek: week,
-                              })
-                            }
-                          >
-                            <span className={styles.freqPresetLabel}>{label}</span>
-                            <span className={styles.freqPresetMain}>
-                              {day} {t.freqPerDay}
-                            </span>
-                            <span className={styles.freqPresetSub}>
-                              {week} {t.freqPerWeek} · {cost} ₽
-                            </span>
-                            <span className={styles.freqDots} aria-hidden>
-                              {Array.from({ length: day }).map((_, i) => (
-                                <i key={i} />
-                              ))}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className={styles.freqWeek} aria-hidden>
-                      {(uiLang === "en"
-                        ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-                        : ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-                      ).map((d) => {
-                        const n =
-                          brief.postsPerDay ??
-                          Math.max(1, Math.round((brief.postsPerWeek || 7) / 7));
-                        return (
-                          <div key={d} className={styles.freqDay}>
-                            <span>{d}</span>
-                            <div className={styles.freqDayDots}>
-                              {Array.from({ length: n }).map((_, i) => (
-                                <i key={i} />
-                              ))}
-                            </div>
+                    {briefFreq && (
+                      <>
+                        <div className={styles.freqHead}>
+                          <div>
+                            <p className={styles.freqTitle}>{t.freqTitle}</p>
+                            <p className={styles.fieldHint}>{t.postsPerDayHint}</p>
                           </div>
-                        );
-                      })}
-                    </div>
-                    <p
-                      className={
-                        balanceRub >= brief.postsPerWeek * postPriceRub
-                          ? styles.freqOk
-                          : styles.freqWarn
-                      }
-                    >
-                      {balanceRub >= brief.postsPerWeek * postPriceRub
-                        ? `${t.freqEnough} · ${balanceRub.toLocaleString(uiLang === "en" ? "en-US" : "ru-RU")} ₽`
-                        : `${t.freqNeedTopup}: ${(brief.postsPerWeek * postPriceRub - balanceRub).toLocaleString(uiLang === "en" ? "en-US" : "ru-RU")} ₽`}
-                    </p>
+                          <div className={styles.freqSummary}>
+                            <span>
+                              <strong>{briefFreq.postsPerWeek}</strong>{" "}
+                              {t.freqPerWeek}
+                            </span>
+                            <span>
+                              <strong>
+                                {(
+                                  briefFreq.postsPerWeek * postPriceRub
+                                ).toLocaleString(
+                                  uiLang === "en" ? "en-US" : "ru-RU"
+                                )}{" "}
+                                ₽
+                              </strong>{" "}
+                              {t.freqCost}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className={styles.freqSectionLabel}>{t.freqPostingDays}</p>
+                        <div
+                          className={styles.freqDaysRow}
+                          role="group"
+                          aria-label={t.freqPostingDays}
+                        >
+                          {weekDayLabels(brief.startDate, uiLang).map(
+                            ({ offset, label }) => {
+                              const selected =
+                                briefFreq.postingDays.includes(offset);
+                              return (
+                                <button
+                                  key={offset}
+                                  type="button"
+                                  className={
+                                    selected
+                                      ? styles.freqDayToggleOn
+                                      : styles.freqDayToggle
+                                  }
+                                  onClick={() => {
+                                    const current = normalizePostingDays(
+                                      brief.postingDays
+                                    );
+                                    let next: number[];
+                                    if (current.includes(offset)) {
+                                      if (current.length <= 1) return;
+                                      next = current.filter((d) => d !== offset);
+                                    } else {
+                                      next = [...current, offset].sort(
+                                        (a, b) => a - b
+                                      );
+                                    }
+                                    const maxPosts = next.length * MAX_PER_DAY;
+                                    setBrief({
+                                      ...brief,
+                                      postingDays: next,
+                                      postsPerWeek: Math.min(
+                                        briefFreq.postsPerWeek,
+                                        maxPosts
+                                      ),
+                                    });
+                                  }}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            }
+                          )}
+                        </div>
+
+                        <div className={styles.freqPostCount}>
+                          <label>
+                            {t.freqPostsCount}
+                            <input
+                              type="number"
+                              min={1}
+                              max={briefFreq.postingDays.length * MAX_PER_DAY}
+                              value={briefFreq.postsPerWeek}
+                              onChange={(e) => {
+                                const maxPosts =
+                                  briefFreq.postingDays.length * MAX_PER_DAY;
+                                const n = Math.min(
+                                  maxPosts,
+                                  Math.max(1, Number(e.target.value) || 1)
+                                );
+                                setBrief({ ...brief, postsPerWeek: n });
+                              }}
+                            />
+                            <span className={styles.fieldHint}>
+                              {t.freqPostsCountHint} ·{" "}
+                              {uiLang === "en" ? "max" : "макс."}{" "}
+                              {briefFreq.postingDays.length * MAX_PER_DAY}
+                            </span>
+                          </label>
+                          <div
+                            className={styles.freqCountPresets}
+                            role="group"
+                            aria-label={t.freqPostsCount}
+                          >
+                            {POST_COUNT_PRESETS.map((n) => {
+                              const maxPosts =
+                                briefFreq.postingDays.length * MAX_PER_DAY;
+                              if (n > maxPosts) return null;
+                              const active = briefFreq.postsPerWeek === n;
+                              return (
+                                <button
+                                  key={n}
+                                  type="button"
+                                  className={
+                                    active
+                                      ? styles.freqPresetOn
+                                      : styles.freqPreset
+                                  }
+                                  onClick={() =>
+                                    setBrief({ ...brief, postsPerWeek: n })
+                                  }
+                                >
+                                  {n === 1
+                                    ? t.freqPresetOne
+                                    : n === 3
+                                      ? t.freqPresetThree
+                                      : n === 7
+                                        ? t.freqPresetWeek
+                                        : t.freqPresetActive}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <p
+                          className={
+                            balanceRub >=
+                            briefFreq.postsPerWeek * postPriceRub
+                              ? styles.freqOk
+                              : styles.freqWarn
+                          }
+                        >
+                          {balanceRub >= briefFreq.postsPerWeek * postPriceRub
+                            ? `${t.freqEnough} · ${balanceRub.toLocaleString(uiLang === "en" ? "en-US" : "ru-RU")} ₽`
+                            : `${t.freqNeedTopup}: ${(briefFreq.postsPerWeek * postPriceRub - balanceRub).toLocaleString(uiLang === "en" ? "en-US" : "ru-RU")} ₽`}
+                        </p>
+                      </>
+                    )}
                   </div>
                   <label>
                     {t.startDate}
@@ -2719,12 +2777,15 @@ export default function PlanPage() {
                     className="btn"
                     disabled={pending}
                     onClick={() => {
-                      if (balanceRub < brief.postsPerWeek * postPriceRub) {
+                      const planCost =
+                        (briefFreq?.postsPerWeek ?? brief.postsPerWeek) *
+                        postPriceRub;
+                      if (balanceRub < planCost) {
                         openBilling();
                         setError(
                           uiLang === "en"
-                            ? `Need ${brief.postsPerWeek * postPriceRub} ₽, balance ${balanceRub} ₽`
-                            : `Нужно ${brief.postsPerWeek * postPriceRub} ₽, на балансе ${balanceRub} ₽`
+                            ? `Need ${planCost} ₽, balance ${balanceRub} ₽`
+                            : `Нужно ${planCost} ₽, на балансе ${balanceRub} ₽`
                         );
                         return;
                       }
@@ -2733,7 +2794,7 @@ export default function PlanPage() {
                   >
                     {pending
                       ? t.makingPlan
-                      : `${t.makePlan} · ${brief.postsPerWeek * postPriceRub} ₽`}
+                      : `${t.makePlan} · ${(briefFreq?.postsPerWeek ?? brief.postsPerWeek) * postPriceRub} ₽`}
                   </button>
                   <Link href="/plan/billing" className="btn btn-ghost">
                     {uiLang === "en" ? "Top up" : "Пополнить"}
@@ -3636,11 +3697,11 @@ export default function PlanPage() {
                                             ? "…"
                                             : draft.imagePath
                                               ? uiLang === "en"
-                                                ? `New photo · ${imagePriceRub} ₽`
-                                                : `Новое фото · ${imagePriceRub} ₽`
+                                                ? `${t.photoRegenerate} · ${imagePriceRub} ₽`
+                                                : `${t.photoRegenerate} · ${imagePriceRub} ₽`
                                               : uiLang === "en"
-                                                ? `Create photo · ${imagePriceRub} ₽`
-                                                : `Создать фото · ${imagePriceRub} ₽`}
+                                                ? `${t.photoCreate} · ${t.photoFree}`
+                                                : `${t.photoCreate} · ${t.photoFree}`}
                                         </button>
                                       )}
                                     {draft.channel !== "threads" &&
@@ -3660,8 +3721,8 @@ export default function PlanPage() {
                                           {busyId === draft.id
                                             ? "…"
                                             : uiLang === "en"
-                                              ? `Create photo · ${imagePriceRub} ₽`
-                                              : `Создать фото · ${imagePriceRub} ₽`}
+                                              ? `${t.photoCreate} · ${t.photoFree}`
+                                              : `${t.photoCreate} · ${t.photoFree}`}
                                         </button>
                                       )}
                                     {draft.channel !== "threads" &&

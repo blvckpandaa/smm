@@ -4,8 +4,8 @@ export const POST_PRICE_RUB = 50;
 /** Переписать текст одного поста (руб.) */
 export const REWRITE_TEXT_PRICE_RUB = 25;
 
-/** Пересоздать / сгенерировать фото поста (руб.) */
-export const REGENERATE_IMAGE_PRICE_RUB = 25;
+/** Пересоздать фото поста (руб.). Первое фото в посте — бесплатно. */
+export const REGENERATE_IMAGE_PRICE_RUB = 10;
 
 /** Период активации бота комментариев (дней) */
 export const BOT_PERIOD_DAYS = 30;

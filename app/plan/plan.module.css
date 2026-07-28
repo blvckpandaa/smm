@@ -1314,6 +1314,66 @@
   color: #8a4b00;
 }
 
+.freqSectionLabel {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.freqDaysRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.freqDayToggle,
+.freqDayToggleOn {
+  min-width: 2.75rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: var(--paper);
+  cursor: pointer;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.freqDayToggle:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+
+.freqDayToggleOn {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--paper));
+  color: var(--ink);
+}
+
+.freqPostCount {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.freqPostCount input[type="number"] {
+  width: 5rem;
+  margin-top: 0.25rem;
+}
+
+.freqCountPresets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.freqCountPresets .freqPreset,
+.freqCountPresets .freqPresetOn {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.75rem;
+}
+
 @media (max-width: 860px) {
   .freqPresets {
     grid-template-columns: repeat(2, minmax(0, 1fr));

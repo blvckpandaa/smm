@@ -92,7 +92,7 @@ const SYSTEM_PROMPT = `Ты агент-маркетолог SMM-платформ
   ]
 }
 
-Количество topics должно быть ровно равно postsPerWeek из брифа (это postsPerDay × 7).`;
+Количество topics должно быть ровно равно postsPerWeek из брифа.`;
 
 export async function generateTopicsWithDeepSeek(
   brief: BrandBrief
@@ -113,6 +113,7 @@ export async function generateTopicsWithDeepSeek(
     channels: brief.channels,
     postsPerDay: brief.postsPerDay ?? Math.max(1, Math.round((brief.postsPerWeek || 7) / 7)),
     postsPerWeek: brief.postsPerWeek,
+    postingDays: brief.postingDays,
     taboos: brief.taboos ?? [],
     goals: brief.goals ?? [],
   };

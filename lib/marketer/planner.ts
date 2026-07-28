@@ -116,8 +116,8 @@ function buildPlanFromIdeas(
 ): ContentPlan {
   const tz = isValidTimeZone(brief.timezone) ? brief.timezone : "Europe/Moscow";
   const channels = brief.channels.length ? brief.channels : (["telegram"] as Channel[]);
-  const { postsPerDay, postsPerWeek } = resolvePostFrequency(brief);
-  const total = Math.max(channels.length, postsPerWeek, ideas.length);
+  const { postsPerDay, postsPerWeek, postingDays } = resolvePostFrequency(brief);
+  const total = Math.max(postsPerWeek, 1);
   const startYmd = brief.startDate;
   const endYmd = addCalendarDays(startYmd, 6);
 
@@ -126,15 +126,9 @@ function buildPlanFromIdeas(
   const takenOnDay = new Set<string>();
   const takenWeekHours = new Set<string>();
 
-  // Ровно postsPerDay постов на каждый из 7 дней
   const dayIndexes: number[] = [];
-  for (let d = 0; d < 7; d++) {
-    for (let p = 0; p < postsPerDay; p++) {
-      dayIndexes.push(d);
-    }
-  }
-  while (dayIndexes.length < total) {
-    dayIndexes.push(dayIndexes.length % 7);
+  for (let i = 0; i < total; i++) {
+    dayIndexes.push(postingDays[i % postingDays.length]);
   }
 
   // Count posts per day+channel for diversification index
@@ -230,7 +224,7 @@ function buildPlanFromIdeas(
     strategyNotes: strategyNotes(
       { ...brief, timezone: tz, postsPerDay, postsPerWeek },
       [
-        `Частота: ${postsPerDay} пост(ов) в день · ${postsPerWeek} за неделю.`,
+        `Частота: ${postsPerWeek} пост(ов) за неделю · ${postingDays.length} дн. публикации.`,
         ...extraNotes,
       ]
     ),
@@ -242,7 +236,7 @@ function buildPlanFromIdeas(
 export function createWeeklyPlan(brief: BrandBrief): ContentPlan {
   const channels = brief.channels.length ? brief.channels : (["telegram"] as Channel[]);
   const { postsPerWeek } = resolvePostFrequency(brief);
-  const total = Math.max(channels.length, postsPerWeek);
+  const total = Math.max(postsPerWeek, 1);
   const goals = allocateGoals(total, brief.goals);
   const pool = topicsForNiche(brief.niche);
   const usedTopics = new Set<string>();
