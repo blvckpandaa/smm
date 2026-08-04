@@ -3,7 +3,7 @@ import { buildContentPlan } from "@/lib/ai/deepseek";
 import { getRuntimePricing } from "@/lib/billing/runtime-pricing";
 import { resolvePostFrequency } from "@/lib/marketer/frequency";
 import { isValidTimeZone } from "@/lib/marketer/timezone";
-import { slotFromLocalInput } from "@/lib/schedule/pick-time";
+import { isValidYmd, slotFromLocalInput } from "@/lib/schedule/pick-time";
 import type { BrandBrief, ContentPlan, PlannedPost } from "@/lib/marketer/types";
 import type { PostDraft } from "@/lib/smm/types";
 import {
@@ -206,6 +206,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (!body.postId || !body.day || !body.timeLocal) {
       return Response.json(
         { error: "Нужны postId, day и timeLocal" },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidYmd(body.day)) {
+      return Response.json(
+        { error: "Некорректная дата" },
         { status: 400 }
       );
     }

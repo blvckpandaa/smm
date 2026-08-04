@@ -1338,16 +1338,19 @@
   text-align: center;
   font-weight: 700;
   font-size: 0.82rem;
+  color: var(--ink-soft);
 }
 
 .freqDayToggle:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-color: color-mix(in srgb, var(--lime-deep) 45%, var(--line));
+  color: var(--ink);
 }
 
 .freqDayToggleOn {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, var(--paper));
-  color: var(--ink);
+  border-color: var(--ink);
+  background: var(--lime);
+  color: var(--on-lime);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 .freqPostCount {

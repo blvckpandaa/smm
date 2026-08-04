@@ -65,6 +65,20 @@ export function pickBestSlot(options: {
   };
 }
 
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function isValidYmd(day: string | null | undefined): boolean {
+  if (!day || !YMD_RE.test(day)) return false;
+  const [y, m, d] = day.split("-").map(Number);
+  if (!y || m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return (
+    dt.getUTCFullYear() === y &&
+    dt.getUTCMonth() === m - 1 &&
+    dt.getUTCDate() === d
+  );
+}
+
 /** Пересчитать ISO из даты+времени в таймзоне проекта */
 export function slotFromLocalInput(options: {
   day: string;
@@ -72,7 +86,12 @@ export function slotFromLocalInput(options: {
   timeZone: string;
   channel: Channel;
 }): PickedSlot {
-  const [h, m] = options.timeLocal.split(":").map(Number);
+  if (!isValidYmd(options.day)) {
+    throw new Error(`Invalid date: ${options.day || "(empty)"}`);
+  }
+  const [h, m] = String(options.timeLocal || "")
+    .split(":")
+    .map(Number);
   const hour = Number.isFinite(h) ? h : 19;
   const minute = Number.isFinite(m) ? m : 0;
   const when = fromZonedTime(options.day, hour, minute, options.timeZone);
@@ -84,7 +103,7 @@ export function slotFromLocalInput(options: {
     day: options.day,
     timeLocal: formatHm(hour, minute),
     scheduledAtIso: when.toISOString(),
-    weekday: WEEKDAYS_RU[dow],
+    weekday: WEEKDAYS_RU[dow] ?? WEEKDAYS_RU[0],
     why: match
       ? `${match.label} · ${formatHm(hour, minute)} ${options.timeZone}`
       : `вручную · ${formatHm(hour, minute)} ${options.timeZone}`,

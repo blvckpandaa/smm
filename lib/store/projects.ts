@@ -273,7 +273,7 @@ function defaultBrief(name = ""): BrandBrief {
     facts: {},
     channels: ["telegram"],
     postsPerDay: 1,
-    postsPerWeek: 7,
+    postsPerWeek: 4,
     postingDays: [0, 1, 2, 3, 4, 5, 6],
     taboos: [],
     startDate: new Date().toISOString().slice(0, 10),

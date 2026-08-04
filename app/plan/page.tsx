@@ -6,16 +6,13 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import type { BrandBrief, Channel, ContentPlan, PostGoal } from "@/lib/marketer";
 import type { PostDraft } from "@/lib/smm/types";
 import {
+  isValidYmd,
   pickBestSlot,
   slotFromLocalInput,
 } from "@/lib/schedule/pick-time";
 import {
-  AUDIENCE_LANGUAGES,
-  BUSINESS_TYPES_I18N,
   WORKING_CHANNELS,
   dict,
-  nicheForUi,
-  nicheToCanonical,
   type UiLang,
   UI_LANG_KEY,
 } from "@/lib/i18n/ui";
@@ -25,7 +22,7 @@ import {
   normalizePostingDays,
   MAX_PER_DAY,
 } from "@/lib/marketer/frequency";
-import { addCalendarDays, weekdayIndexFromYmd } from "@/lib/marketer/timezone";
+import { weekdayIndexFromYmd } from "@/lib/marketer/timezone";
 import { parseVkGroupId } from "@/lib/vk/parse-group-id";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { BrandLogo } from "@/app/components/BrandLogo";
@@ -41,20 +38,6 @@ const CHANNELS: { id: Channel; label: string }[] = [
   { id: "x", label: "X" },
 ];
 
-const TIMEZONES = [
-  "Europe/Moscow",
-  "Europe/Samara",
-  "Asia/Yekaterinburg",
-  "Asia/Novosibirsk",
-  "Asia/Krasnoyarsk",
-  "Asia/Irkutsk",
-  "Asia/Vladivostok",
-  "Asia/Almaty",
-  "Asia/Tashkent",
-  "Europe/Kyiv",
-  "Europe/Minsk",
-  "UTC",
-];
 
 type Tab = "brief" | "plan" | "drafts" | "channels" | "bots";
 
@@ -358,7 +341,9 @@ function todayInZone(timeZone: string): string {
 }
 
 function addDaysIso(day: string, days: number): string {
+  if (!isValidYmd(day)) return day || "";
   const d = new Date(`${day}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return day;
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
 }
@@ -369,12 +354,18 @@ function dayHeading(
   weekday: string,
   lang: UiLang
 ): string {
-  if (day === today) return lang === "en" ? "Today" : "Сегодня";
-  if (day === addDaysIso(today, 1))
-    return lang === "en" ? "Tomorrow" : "Завтра";
-  if (day === addDaysIso(today, -1))
-    return lang === "en" ? "Yesterday" : "Вчера";
-  return `${weekday} · ${day.slice(5).replace("-", ".")}`;
+  if (day && day === today) return lang === "en" ? "Today" : "Сегодня";
+  if (isValidYmd(today)) {
+    if (day === addDaysIso(today, 1))
+      return lang === "en" ? "Tomorrow" : "Завтра";
+    if (day === addDaysIso(today, -1))
+      return lang === "en" ? "Yesterday" : "Вчера";
+  }
+  const shortDay =
+    typeof day === "string" && day.length >= 10
+      ? day.slice(5).replace("-", ".")
+      : day || "—";
+  return `${weekday || "—"} · ${shortDay}`;
 }
 
 function needsAttention(status: PostDraft["status"]): boolean {
@@ -532,14 +523,24 @@ function briefForForm(brief: BrandBrief): BrandBrief {
 
 const WEEKDAY_SHORT_RU = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 const WEEKDAY_SHORT_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const POST_COUNT_PRESETS = [1, 3, 7, 14];
+const POST_COUNT_PRESETS = [1, 3, 4, 7];
 
 function weekDayLabels(startDate: string, uiLang: UiLang) {
   const short = uiLang === "en" ? WEEKDAY_SHORT_EN : WEEKDAY_SHORT_RU;
-  return [0, 1, 2, 3, 4, 5, 6].map((offset) => ({
-    offset,
-    label: short[weekdayIndexFromYmd(addCalendarDays(startDate, offset))],
-  }));
+  // Всегда Пн → Вс (не «от startDate»), иначе кнопки прыгают.
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  const base = isValidYmd(startDate)
+    ? startDate
+    : new Date().toISOString().slice(0, 10);
+  const startDow = weekdayIndexFromYmd(base);
+  return order.map((dow) => {
+    const offset = (dow - startDow + 7) % 7;
+    return {
+      dow,
+      offset,
+      label: short[dow] ?? short[0],
+    };
+  });
 }
 
 function draftImagePriceRub(draft: PostDraft, regeneratePriceRub: number): number {
@@ -633,9 +634,6 @@ export default function PlanPage() {
       ] as const,
     [NAV, t.navGroupWork, t.navGroupConnect, t.navGroupSettings]
   );
-  const BUSINESS_TYPES = BUSINESS_TYPES_I18N[uiLang];
-  const otherLabel = t.other;
-
   const refreshBilling = useCallback(async () => {
     try {
       const res = await fetch("/api/billing");
@@ -1360,6 +1358,7 @@ export default function PlanPage() {
     timeLocal: string
   ) {
     if (!projectId) return;
+    if (!isValidYmd(day) || !String(timeLocal || "").trim()) return;
     setError(null);
     try {
       const res = await fetch(`/api/projects/${projectId}/plan`, {
@@ -1369,9 +1368,11 @@ export default function PlanPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Не удалось изменить время");
-      setProjects((prev) =>
-        prev.map((p) => (p.id === projectId ? data.project : p))
-      );
+      if (data.project) {
+        setProjects((prev) =>
+          prev.map((p) => (p.id === projectId ? data.project : p))
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка");
     }
@@ -1513,19 +1514,24 @@ export default function PlanPage() {
     why?: string
   ) {
     if (!brief) return;
-    const slot = slotFromLocalInput({
-      day,
-      timeLocal,
-      timeZone: brief.timezone,
-      channel: draft.channel,
-    });
-    updateDraft(draft.id, {
-      day: slot.day,
-      timeLocal: slot.timeLocal,
-      scheduledAtIso: slot.scheduledAtIso,
-      weekday: slot.weekday,
-      scheduleWhy: why || slot.why,
-    });
+    if (!isValidYmd(day) || !String(timeLocal || "").trim()) return;
+    try {
+      const slot = slotFromLocalInput({
+        day,
+        timeLocal,
+        timeZone: brief.timezone,
+        channel: draft.channel,
+      });
+      updateDraft(draft.id, {
+        day: slot.day,
+        timeLocal: slot.timeLocal,
+        scheduledAtIso: slot.scheduledAtIso,
+        weekday: slot.weekday,
+        scheduleWhy: why || slot.why,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка");
+    }
   }
 
   function pickTimeForDraft(draft: PostDraft) {
@@ -1533,7 +1539,7 @@ export default function PlanPage() {
     const taken = new Set(
       project.drafts
         .filter((d) => d.id !== draft.id)
-        .map((d) => `${d.channel}:${d.day}:${Number(d.timeLocal.slice(0, 2))}`)
+        .map((d) => `${d.channel}:${d.day}:${Number((d.timeLocal || "0").slice(0, 2))}`)
     );
     const slot = pickBestSlot({
       channel: draft.channel,
@@ -1576,7 +1582,8 @@ export default function PlanPage() {
         project.drafts
           .filter((d) => d.id !== draft.id)
           .map(
-            (d) => `${d.channel}:${d.day}:${Number(d.timeLocal.slice(0, 2))}`
+            (d) =>
+              `${d.channel}:${d.day}:${Number((d.timeLocal || "0").slice(0, 2))}`
           )
       );
       const slot = pickBestSlot({
@@ -2166,9 +2173,7 @@ export default function PlanPage() {
                     >
                       <span className={styles.bizName}>{p.name}</span>
                       <span className={styles.bizNiche}>
-                        {p.brief.niche
-                          ? nicheForUi(p.brief.niche, uiLang)
-                          : t.noNiche}
+                        {p.brief.offer?.trim() || p.brief.brandName || "—"}
                       </span>
                     </button>
                   ))}
@@ -2298,9 +2303,7 @@ export default function PlanPage() {
                     >
                       <span className={styles.bizName}>{p.name}</span>
                       <span className={styles.bizNiche}>
-                        {p.brief.niche
-                          ? nicheForUi(p.brief.niche, uiLang)
-                          : t.noNiche}
+                        {p.brief.offer?.trim() || p.brief.brandName || "—"}
                       </span>
                     </button>
                   ))}
@@ -2328,12 +2331,6 @@ export default function PlanPage() {
                   <span>
                     <strong>{project.name}</strong>
                   </span>
-                  <span className={styles.hideXs}>
-                    {brief.niche
-                      ? nicheForUi(brief.niche, uiLang)
-                      : t.nicheNotSet}
-                  </span>
-                  <span className={styles.hideXs}>{brief.timezone}</span>
                   <span>
                     TG {project.channels.telegram.connected ? "✓" : "—"}
                   </span>
@@ -2396,87 +2393,6 @@ export default function PlanPage() {
                       placeholder={t.brandNamePh}
                     />
                   </label>
-                  <label className={styles.full}>
-                    {t.businessType}
-                    <div className={styles.typeGrid}>
-                      {BUSINESS_TYPES.map((type) => {
-                        const displayNiche = nicheForUi(brief.niche, uiLang);
-                        const active =
-                          displayNiche === type ||
-                          (type === otherLabel &&
-                            brief.niche !== "" &&
-                            !BUSINESS_TYPES.includes(displayNiche) &&
-                            !BUSINESS_TYPES_I18N.ru.includes(brief.niche) &&
-                            !BUSINESS_TYPES_I18N.en.includes(brief.niche));
-                        return (
-                          <button
-                            key={type}
-                            type="button"
-                            className={
-                              active ? styles.typeOn : styles.typeChip
-                            }
-                            onClick={() =>
-                              setBrief({
-                                ...brief,
-                                niche:
-                                  type === otherLabel
-                                    ? ""
-                                    : nicheToCanonical(type),
-                              })
-                            }
-                          >
-                            {type}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </label>
-                  <label className={styles.full}>
-                    {t.nicheCustom}
-                    <input
-                      value={
-                        BUSINESS_TYPES_I18N.ru.includes(brief.niche) ||
-                        BUSINESS_TYPES_I18N.en.includes(brief.niche)
-                          ? ""
-                          : brief.niche
-                      }
-                      onChange={(e) =>
-                        setBrief({ ...brief, niche: e.target.value })
-                      }
-                      placeholder={t.nichePh}
-                    />
-                  </label>
-                  <label>
-                    {t.timezone}
-                    <select
-                      value={brief.timezone}
-                      onChange={(e) =>
-                        setBrief({ ...brief, timezone: e.target.value })
-                      }
-                    >
-                      {TIMEZONES.map((tz) => (
-                        <option key={tz} value={tz}>
-                          {tz}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    {t.audienceLang}
-                    <select
-                      value={brief.language || "ru"}
-                      onChange={(e) =>
-                        setBrief({ ...brief, language: e.target.value })
-                      }
-                    >
-                      {AUDIENCE_LANGUAGES.map((lang) => (
-                        <option key={lang.id} value={lang.id}>
-                          {uiLang === "en" ? lang.labelEn : lang.labelRu}
-                        </option>
-                      ))}
-                    </select>
-                    <span className={styles.fieldHint}>{t.audienceLangHint}</span>
-                  </label>
                   <div className={`${styles.full} ${styles.freqCard}`}>
                     {briefFreq && (
                       <>
@@ -2511,12 +2427,12 @@ export default function PlanPage() {
                           aria-label={t.freqPostingDays}
                         >
                           {weekDayLabels(brief.startDate, uiLang).map(
-                            ({ offset, label }) => {
+                            ({ dow, offset, label }) => {
                               const selected =
                                 briefFreq.postingDays.includes(offset);
                               return (
                                 <button
-                                  key={offset}
+                                  key={dow}
                                   type="button"
                                   className={
                                     selected
@@ -2605,9 +2521,11 @@ export default function PlanPage() {
                                     ? t.freqPresetOne
                                     : n === 3
                                       ? t.freqPresetThree
-                                      : n === 7
-                                        ? t.freqPresetWeek
-                                        : t.freqPresetActive}
+                                      : n === 4
+                                        ? (uiLang === "en" ? "4 / week" : "4 в неделю")
+                                        : n === 7
+                                          ? t.freqPresetWeek
+                                          : t.freqPresetActive}
                                 </button>
                               );
                             })}
@@ -2633,10 +2551,12 @@ export default function PlanPage() {
                     {t.startDate}
                     <input
                       type="date"
-                      value={brief.startDate}
-                      onChange={(e) =>
-                        setBrief({ ...brief, startDate: e.target.value })
-                      }
+                      value={brief.startDate || ""}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (next && !isValidYmd(next)) return;
+                        setBrief({ ...brief, startDate: next });
+                      }}
                     />
                   </label>
                   <label className={styles.full}>
@@ -2851,7 +2771,7 @@ export default function PlanPage() {
                     изменить дату и час.
                   </p>
                   <ul className={styles.notes}>
-                    {project.plan.strategyNotes.slice(0, 4).map((n) => (
+                    {project.plan.strategyNotes?.slice(0, 4).map((n) => (
                       <li key={n}>{n}</li>
                     ))}
                   </ul>
@@ -2892,28 +2812,32 @@ export default function PlanPage() {
                             Дата
                             <input
                               type="date"
-                              value={post.day}
-                              onChange={(e) =>
+                              value={post.day || ""}
+                              onChange={(e) => {
+                                const next = e.target.value;
+                                if (!isValidYmd(next)) return;
                                 void updatePlanPostTime(
                                   post.id,
-                                  e.target.value,
-                                  post.timeLocal
-                                )
-                              }
+                                  next,
+                                  post.timeLocal || "12:00"
+                                );
+                              }}
                             />
                           </label>
                           <label>
                             Время
                             <input
                               type="time"
-                              value={post.timeLocal.slice(0, 5)}
-                              onChange={(e) =>
+                              value={(post.timeLocal || "12:00").slice(0, 5)}
+                              onChange={(e) => {
+                                const next = e.target.value;
+                                if (!next) return;
                                 void updatePlanPostTime(
                                   post.id,
                                   post.day,
-                                  e.target.value
-                                )
-                              }
+                                  next
+                                );
+                              }}
                             />
                           </label>
                         </div>
@@ -3068,8 +2992,8 @@ export default function PlanPage() {
                             </span>
                             <strong>
                               {channelLabel(postsStats.nextQueued.channel)} ·{" "}
-                              {postsStats.nextQueued.day.slice(5)}{" "}
-                              {postsStats.nextQueued.timeLocal.slice(0, 5)}
+                              {(postsStats.nextQueued.day || "").slice(5)}{" "}
+                              {(postsStats.nextQueued.timeLocal || "").slice(0, 5)}
                             </strong>
                           </button>
                         )}
@@ -3278,10 +3202,10 @@ export default function PlanPage() {
                                       >
                                         <td>
                                           <div className={styles.cellMain}>
-                                            {draft.timeLocal.slice(0, 5)}
+                                            {(draft.timeLocal || "").slice(0, 5)}
                                           </div>
                                           <div className={styles.cellSub}>
-                                            {draft.day.slice(5)}
+                                            {(draft.day || "").slice(5)}
                                           </div>
                                         </td>
                                         <td>
@@ -3622,15 +3546,17 @@ export default function PlanPage() {
                                       <input
                                         className={styles.fieldControl}
                                         type="date"
-                                        value={draft.day}
+                                        value={draft.day || ""}
                                         disabled={locked}
-                                        onChange={(e) =>
+                                        onChange={(e) => {
+                                          const next = e.target.value;
+                                          if (!isValidYmd(next)) return;
                                           applySchedule(
                                             draft,
-                                            e.target.value,
-                                            draft.timeLocal
-                                          )
-                                        }
+                                            next,
+                                            draft.timeLocal || "12:00"
+                                          );
+                                        }}
                                       />
                                     </label>
                                     <label className={styles.field}>
@@ -3640,15 +3566,20 @@ export default function PlanPage() {
                                       <input
                                         className={styles.fieldControl}
                                         type="time"
-                                        value={draft.timeLocal.slice(0, 5)}
+                                        value={(draft.timeLocal || "12:00").slice(
+                                          0,
+                                          5
+                                        )}
                                         disabled={locked}
-                                        onChange={(e) =>
+                                        onChange={(e) => {
+                                          const next = e.target.value;
+                                          if (!next) return;
                                           applySchedule(
                                             draft,
                                             draft.day,
-                                            e.target.value
-                                          )
-                                        }
+                                            next
+                                          );
+                                        }}
                                       />
                                     </label>
                                   </div>

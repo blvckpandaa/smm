@@ -82,7 +82,13 @@ export function formatInTimeZone(
 /** Add calendar days to YYYY-MM-DD */
 export function addCalendarDays(ymd: string, days: number): string {
   const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) {
+    throw new Error(`Invalid date: ${ymd || "(empty)"}`);
+  }
   const dt = new Date(Date.UTC(y, m - 1, d + days));
+  if (Number.isNaN(dt.getTime())) {
+    throw new Error(`Invalid date: ${ymd}`);
+  }
   return dt.toISOString().slice(0, 10);
 }
 
